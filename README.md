@@ -34,9 +34,9 @@ pio run -e transmitter -t upload   # flash the second ESP32 (Test 3)
 ## Status
 
 - [x] Repo scaffold, docs, firmware skeleton, printable part sources
-- [ ] `mecanum::mix()` implemented (Jason — see `firmware/lib/kinematics/`)
+- [x] `mecanum::mix()` implemented — normalize-on-overflow, 10/10 tests green
 - [x] Failsafe policy implemented — limp/stop ladder on command silence + battery
-- [ ] Test 1 — bench motor sanity (FL verified on bench 2026-07-02; FR/RL/RR pending)
+- [ ] Test 1 — bench motor sanity (FL verified on bench; FR/RL/RR pending)
 - [ ] Test 2 — full drive on kitchen floor (serial `demo` command)
-- [ ] Test 3 — ESP-NOW remote control from second ESP32
+- [ ] Test 3 — ESP-NOW remote control (link verified 0-drop on bench; driving pending)
 - [ ] Test 4 — sustained run + battery baseline
