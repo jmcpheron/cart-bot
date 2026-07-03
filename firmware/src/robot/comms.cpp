@@ -1,0 +1,77 @@
+#include "comms.h"
+
+#include <Arduino.h>
+#include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
+
+#include "protocol.h"
+#include "setpoint.h"
+
+namespace {
+
+SetpointStore* g_store = nullptr;
+portMUX_TYPE g_stats_mux = portMUX_INITIALIZER_UNLOCKED;
+CommsStats g_stats;
+bool g_seen_any = false;
+
+// Runs in the Wi-Fi task — keep it short: copy, validate, store.
+void on_receive(const uint8_t* /*mac*/, const uint8_t* data, int len) {
+    if (len != static_cast<int>(sizeof(proto::robot_cmd_t))) {
+        portENTER_CRITICAL(&g_stats_mux);
+        g_stats.bad_len++;
+        portEXIT_CRITICAL(&g_stats_mux);
+        return;
+    }
+    proto::robot_cmd_t cmd;
+    memcpy(&cmd, data, sizeof(cmd));
+
+    portENTER_CRITICAL(&g_stats_mux);
+    g_stats.packets++;
+    if (g_seen_any) {
+        const uint16_t expected = g_stats.last_seq + 1;
+        g_stats.drops += static_cast<uint16_t>(cmd.seq - expected);
+    }
+    g_stats.last_seq = cmd.seq;
+    g_seen_any = true;
+    portEXIT_CRITICAL(&g_stats_mux);
+
+    if (!g_store) return;
+    switch (cmd.cmd) {
+        case proto::kCmdDrive:
+            g_store->setVelocity(cmd.vx, cmd.vy, cmd.omega);
+            break;
+        case proto::kCmdStop:
+            g_store->setVelocity(0, 0, 0);
+            break;
+        case proto::kCmdPing:
+            g_store->touch();
+            break;
+        default:
+            break;
+    }
+}
+
+}  // namespace
+
+void comms_begin(SetpointStore* store) {
+    g_store = store;
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();  // no AP association — ESP-NOW only
+    esp_wifi_set_channel(proto::kEspNowChannel, WIFI_SECOND_CHAN_NONE);
+
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("[comms] esp_now_init FAILED");
+        return;
+    }
+    esp_now_register_recv_cb(on_receive);
+    Serial.printf("[comms] ESP-NOW up on channel %u, MAC %s\n",
+                  proto::kEspNowChannel, WiFi.macAddress().c_str());
+}
+
+CommsStats comms_stats() {
+    portENTER_CRITICAL(&g_stats_mux);
+    CommsStats s = g_stats;
+    portEXIT_CRITICAL(&g_stats_mux);
+    return s;
+}

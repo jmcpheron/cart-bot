@@ -1,0 +1,9 @@
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+
+# macOS
+.DS_Store
+
+# OpenSCAD backup files
+cad/**/*.scad.bak
