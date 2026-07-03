@@ -5,6 +5,7 @@
 // Left pad: drag = vx/vy. Right slider: rotate. Posts to /cmd at 10Hz.
 inline const char kIndexHtml[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html><head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>cart-bot</title>
 <style>
