@@ -29,6 +29,12 @@ Per motor, from the serial console:
 - [ ] `batt` reading vs multimeter at the pack: console ______ V / meter ______ V
 - [ ] LiPo cool to the touch after the session
 
+**Findings log:**
+- 2026-07-03 (FL, unloaded): 20kHz PWM unusable with the L298N (motion only at
+  duty 255) — lowered to 1kHz. At 1kHz, reliable motion from duty ~100; below
+  that the motor hums. Firmware now remaps commands into the 100–255 band
+  (`kMinDuty` in `src/robot/motors.cpp`).
+
 **LiPo care:** 1000mAh @ 35C can source big current but drains fast — ~2h at
 500mA, ~30min at 2A. Never leave it charging unattended; stop discharging at
 6.8V (firmware warns and then stops the motors — that's the failsafe policy).
