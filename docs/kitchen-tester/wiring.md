@@ -23,6 +23,25 @@ LiPo (−) / both L298N GND / ESP32 GND ── all common ground (star at Board 
   brown out the ESP32 mid-drive. Observed symptom is the robot "rebooting" when it
   hits a wall.
 
+## Bench setup (Test 1)
+
+For single-motor bench testing, power the ESP32 from USB and the L298N from the
+LiPo, and **leave the L298N 5V out disconnected**:
+
+```
+Mac USB ─────────────► ESP32                    (power + serial console)
+LiPo (+) ────────────► L298N 12V terminal
+LiPo (−) ────────────► L298N GND ──── jumper ──► ESP32 GND   (REQUIRED)
+TT motor ────────────► L298N OUT1 / OUT2
+GPIO 25 ► IN1    GPIO 26 ► IN2    GPIO 27 ► ENA (plastic jumper removed)
+```
+
+The common-ground jumper is not optional: the IN pins are read *relative to the
+L298N's ground*, so without it the motor does nothing or twitches randomly.
+The 5V→VIN link in the power tree above is only for untethered floor driving —
+never have USB and the 5V link connected at the same time unless you've
+verified your dev board has a protection diode on VIN.
+
 ## Battery sense divider
 
 8.4V full pack → 8.4 × 33/133 ≈ 2.08V at GPIO 34 — inside the ADC's usable range

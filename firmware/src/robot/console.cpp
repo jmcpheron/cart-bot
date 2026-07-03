@@ -18,14 +18,32 @@ size_t g_len = 0;
 void print_help() {
     Serial.println(
         "commands:\n"
-        "  v <vx> <vy> <w>   drive: forward, strafe-right, rotate-CW (-100..100)\n"
-        "  m <fl|fr|rl|rr> <pwm>   single motor, -255..255 (Test 1 bench mode)\n"
+        "  v <vx> <vy> <w>   drive (-100..100); holds until Enter\n"
+        "  m <fl|fr|rl|rr> <pwm>   single motor, -255..255; holds until Enter\n"
         "  stop              all motors off\n"
         "  demo              scripted Test 2 sequence (3s countdown first)\n"
         "  batt              pack voltage\n"
         "  stats             ESP-NOW packet stats\n"
         "  mac               this robot's MAC (for the transmitter config)\n"
         "  help              this text");
+}
+
+// Hold the current motion — feeding the watchdog — until the user presses
+// Enter. Without this, a strict failsafe (correctly) kills a one-shot command
+// after kCmdTimeoutMs, which would make bench testing miserable.
+void hold_until_enter() {
+    Serial.println("    (running — press Enter to stop)");
+    while (Serial.available()) Serial.read();  // drain leftovers
+    for (;;) {
+        if (Serial.available()) {
+            const char c = static_cast<char>(Serial.read());
+            if (c == '\n' || c == '\r') break;
+        }
+        g_store->touch();
+        delay(50);
+    }
+    g_store->setVelocity(0, 0, 0);
+    Serial.println("[stop]");
 }
 
 // Hold one motion for `ms` while refreshing the watchdog timestamp.
@@ -73,7 +91,8 @@ void cmd_motor(const char* which, int pwm) {
     else if (strcmp(which, "rr") == 0) w.rr = clamped;
     else { Serial.println("? motor must be fl|fr|rl|rr"); return; }
     g_store->setDirect(w);
-    Serial.printf("[m] %s = %d (direct mode; `stop` or `v` to exit)\n", which, clamped);
+    Serial.printf("[m] %s = %d\n", which, clamped);
+    if (clamped != 0) hold_until_enter();
 }
 
 void handle_line(char* line) {
@@ -92,6 +111,7 @@ void handle_line(char* line) {
         int w  = constrain(atoi(c), -100, 100);
         g_store->setVelocity(vx, vy, w);
         Serial.printf("[v] vx=%d vy=%d w=%d\n", vx, vy, w);
+        if (vx != 0 || vy != 0 || w != 0) hold_until_enter();
     } else if (strcmp(cmd, "m") == 0) {
         const char* which = strtok(nullptr, " ");
         const char* val = strtok(nullptr, " ");

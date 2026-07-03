@@ -13,13 +13,15 @@ STOP, so wheels will not turn until the policy is written.
 ## Test 1 — Power-Up and Motor Sanity (~30 min)
 
 Bench test **before** chassis assembly. One L298N + LiPo + ESP32; motors clipped
-to the bench, wheels free.
+to the bench, wheels free. Use the bench topology in
+[`wiring.md`](wiring.md#bench-setup-test-1) — ESP32 on USB, L298N on the LiPo,
+grounds tied together, **no** 5V→VIN link yet.
 
 Per motor, from the serial console:
 1. `m fl 60` → wheel spins "forward" — mark the rotation direction on tape.
-2. `m fl -60` → spins the other way.
-3. `m fl 0` → stops.
-4. Repeat for `fr`, `rl`, `rr`.
+   The command holds until you press Enter (that's the watchdog being fed).
+2. `m fl -60` → spins the other way; Enter to stop.
+3. Repeat for `fr`, `rl`, `rr`.
 
 - [ ] All 4 motors spin both directions on command
 - [ ] Any backwards motor fixed by swapping its IN1/IN2 in `src/robot/pins.h`
