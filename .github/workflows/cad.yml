@@ -1,0 +1,99 @@
+# CAD revision tracking — adapted from jmcpheron/pycon2026 build-step.yml.
+# Push a change to any cad/step/*.step and this regenerates the metric
+# reports, STLs, and PNG previews, then auto-commits them. The git diff of
+# cad/reports/*.txt IS the design change record.
+
+name: CAD artifacts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cad/step/**'
+      - 'tools/cadlab/**'
+      - '.github/workflows/cad.yml'
+  pull_request:
+    paths:
+      - 'cad/step/**'
+      - 'tools/cadlab/**'
+      - '.github/workflows/cad.yml'
+
+# Cancel any in-flight run for the same branch when a new push arrives —
+# prevents two auto-commits racing each other (and the human pusher).
+concurrency:
+  group: cad-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cad:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Install OpenSCAD + xvfb (PNG rendering needs an X display)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openscad xvfb
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'tools/cadlab/uv.lock'
+
+      - name: Sync dependencies (includes the heavy OCP wheel)
+        run: uv sync --project tools/cadlab
+
+      - name: Run cadlab tests
+        run: uv run --project tools/cadlab pytest tools/cadlab/tests -q
+
+      - name: Regenerate reports + STL + PNG for every STEP revision
+        run: xvfb-run -a uv run --project tools/cadlab cadlab all
+
+      - name: Show diff between the two chassis revisions (job summary)
+        run: |
+          uv run --project tools/cadlab cadlab diff \
+            cad/reports/tt-mount-chassis-1.toml \
+            cad/reports/tt-mount-chassis-2.toml \
+            | tee -a "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cad-artifacts
+          path: |
+            cad/reports/**
+            cad/img/**
+          retention-days: 30
+
+      - name: Commit regenerated artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add cad/reports cad/stl/*.stl cad/img
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Auto-generate CAD reports and previews via cadlab
+
+          Generated with GitHub Actions"
+            # Rebase-and-retry push: another workflow or the human pusher may
+            # land on main first; artifact paths are disjoint so rebasing is
+            # conflict-free.
+            for attempt in 1 2 3 4 5; do
+              if git push; then
+                echo "Pushed on attempt $attempt"
+                break
+              fi
+              echo "Push rejected (attempt $attempt); rebasing..."
+              git fetch origin main
+              git rebase origin/main || { git rebase --abort; exit 1; }
+            done
+          fi

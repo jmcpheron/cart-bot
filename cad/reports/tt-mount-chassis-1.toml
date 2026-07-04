@@ -1,0 +1,21 @@
+[metrics]
+file = "tt-mount-chassis-1.step"
+schema = "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF { 1 0 10303 442 3 1 4 }"
+originating = "ONSHAPE BY PTC INC, 1.217"
+timestamp = "2026-07-04T05:18:35Z"
+solids = 5
+children = 5
+bbox_min = [-78.257, -89.952, -1.705]
+bbox_max = [77.743, 90.048, 38.295]
+bbox_size = [156.0, 180.0, 40.0]
+volume_mm3 = 77289.1
+area_mm2 = 56000.0
+center_of_mass = [-0.257, 0.048, 3.658]
+pla_mass_g = 95.8
+triangles = 2588
+
+[design]
+revision = 1
+status = "printed and tested"
+date = "2026-07-03"
+notes = "Initial chassis: vertical TT motor mounts, wheels outboard on the D-shafts. Validated in the first four-wheel spin test."

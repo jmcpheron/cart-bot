@@ -1,0 +1,5 @@
+[design]
+revision = 1
+status = "printed and tested"
+date = "2026-07-03"
+notes = "Initial chassis: vertical TT motor mounts, wheels outboard on the D-shafts. Validated in the first four-wheel spin test."

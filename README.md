@@ -17,7 +17,8 @@ build. See [docs/project-brief.md](docs/project-brief.md) for the full vision.
 | `docs/kitchen-tester/` | Build guide, wiring/pin map, test plan for the tester |
 | `docs/production/roadmap.md` | Next steps after the kitchen tests pass |
 | `firmware/` | PlatformIO project: `robot` + `transmitter` targets, host-run unit tests |
-| `cad/` | OpenSCAD sources + STLs for printed parts (motor brackets, clips, chassis) |
+| `cad/` | STEP design revisions, OpenSCAD sources, generated STL/reports/previews |
+| `tools/cadlab/` | CAD revision tracker (uv/Python): inspect, diff, build, render |
 | `hardware/bom.md` | Bill of materials — on-hand tester parts and production shopping list |
 
 ## Firmware quickstart

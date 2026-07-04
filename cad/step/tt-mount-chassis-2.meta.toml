@@ -1,0 +1,6 @@
+[design]
+revision = 2
+status = "printing"
+date = "2026-07-03"
+changes_from = "tt-mount-chassis-1"
+notes = "Bigger hub bore so the mecanum wheel hub fits through with clearance; deck narrowed."

@@ -1,0 +1,18 @@
+File:           tt-mount-chassis-2.step
+Schema:         AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF { 1 0 10303 442 3 1 4 }
+Originating:    ONSHAPE BY PTC INC, 1.217
+Timestamp:      2026-07-04T05:22:29Z
+Solids:         5   Top-level children: 5
+Bounding box:   X[-68.257, 67.743]  Y[-89.952, 90.048]  Z[-1.705, 38.295]
+Size:           136.0 × 180.0 × 40.0 mm
+Volume:         62,547.7 mm³   (≈77.6 g PLA @ 100% infill)
+Surface area:   48,420.5 mm²
+Center of mass: (-0.257, 0.048, 4.403)
+Tessellation:   2,700 triangles  (linear=0.1 mm  angular=0.5 rad)
+
+Design metadata:
+  design.revision: 2
+  design.status: printing
+  design.date: 2026-07-03
+  design.changes_from: tt-mount-chassis-1
+  design.notes: Bigger hub bore so the mecanum wheel hub fits through with clearance; deck narrowed.

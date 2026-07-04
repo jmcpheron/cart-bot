@@ -7,3 +7,8 @@ firmware/.vscode/
 
 # OpenSCAD backup files
 cad/**/*.scad.bak
+
+# Python (tools/cadlab)
+tools/cadlab/.venv/
+**/__pycache__/
+.pytest_cache/

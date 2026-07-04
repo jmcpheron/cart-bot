@@ -1,0 +1,17 @@
+File:           tt-mount-chassis-1.step
+Schema:         AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF { 1 0 10303 442 3 1 4 }
+Originating:    ONSHAPE BY PTC INC, 1.217
+Timestamp:      2026-07-04T05:18:35Z
+Solids:         5   Top-level children: 5
+Bounding box:   X[-78.257, 77.743]  Y[-89.952, 90.048]  Z[-1.705, 38.295]
+Size:           156.0 × 180.0 × 40.0 mm
+Volume:         77,289.1 mm³   (≈95.8 g PLA @ 100% infill)
+Surface area:   56,000.0 mm²
+Center of mass: (-0.257, 0.048, 3.658)
+Tessellation:   2,588 triangles  (linear=0.1 mm  angular=0.5 rad)
+
+Design metadata:
+  design.revision: 1
+  design.status: printed and tested
+  design.date: 2026-07-03
+  design.notes: Initial chassis: vertical TT motor mounts, wheels outboard on the D-shafts. Validated in the first four-wheel spin test.
