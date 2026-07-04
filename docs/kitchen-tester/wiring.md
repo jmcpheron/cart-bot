@@ -38,8 +38,8 @@ power runs are 18–20 AWG silicone wire.
 
 | ✓ | ESP32 GPIO | Board B pin | Function |
 |---|---|---|---|
-| ☐ | 33 | IN1 | RL direction |
-| ☐ | 32 | IN2 | RL direction |
+| ☐ | 14 | IN1 | RL direction |
+| ☐ | 22 | IN2 | RL direction |
 | ☐ | 23 | ENA | RL speed (PWM) |
 | ☐ | 19 | IN3 | RR direction |
 | ☐ | 18 | IN4 | RR direction |
@@ -68,12 +68,14 @@ backwards wheel is fixed in software, not by re-soldering.
 |---|---|---|---|---|
 | FL | A / OUT1-2 | 25 | 26 | 27 |
 | FR | A / OUT3-4 | 16 | 17 | 4  |
-| RL | B / OUT1-2 | 33 | 32 | 23 |
+| RL | B / OUT1-2 | 14 | 22 | 23 |
 | RR | B / OUT3-4 | 19 | 18 | 21 |
 
-Avoids all ESP32 strap pins (0, 2, 5, 12, 15). Free for future use: 13, 14,
-22, 34 (reserved: battery sense). Never use 35/36/39 (input-only — they
-cannot drive a signal).
+Avoids all ESP32 strap pins (0, 2, 5, 12, 15). Free for future use: 13, 32,
+33, 34 (reserved: battery sense). Never use 35/36/39 (input-only — they
+cannot drive a signal). RL sits on 14/22/23 because the harness was rebuilt
+that way during the GPIO-33 hunt (see troubleshooting) — it works identically
+to the original 33/32 assignment.
 
 ## Troubleshooting
 
