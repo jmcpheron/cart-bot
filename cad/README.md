@@ -24,6 +24,9 @@ uv run --project tools/cadlab cadlab diff \
 `diff` prints a markdown delta table (bbox, volume, surface area, PLA mass,
 solids, triangles) between any two revisions — STEP files or report TOMLs.
 
+Explainer pages for notable revisions live in `docs/design/`:
+[chassis rev 1 → rev 2](../docs/design/chassis-rev1-to-rev2.md).
+
 ## Parts
 
 | Part | Qty | Material | Settings | Notes |
