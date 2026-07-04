@@ -12,4 +12,11 @@ public:
     // For characterizing a motor's true stall threshold from the console.
     void applyRaw(const mecanum::WheelSpeeds& w);
     void stop();
+    // While suspended, apply/applyRaw are no-ops. Diagnostics that take
+    // direct ownership of motor pins (console `rltest`) use this so the
+    // 20ms motor task can't fight their pin writes.
+    void setSuspended(bool s) { suspended_ = s; }
+
+private:
+    volatile bool suspended_ = false;
 };

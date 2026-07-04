@@ -71,8 +71,8 @@ void setup() {
     g_motors.begin();
     g_battery.begin();
     comms_begin(&g_setpoint);
-    webtune_begin(&g_setpoint, &g_battery);
-    console_begin(&g_setpoint, &g_battery);
+    webtune_begin(&g_setpoint, &g_battery, &g_motors);
+    console_begin(&g_setpoint, &g_battery, &g_motors);
 
     xTaskCreatePinnedToCore(motor_task, "motor", 4096, nullptr,
                             /*priority=*/3, nullptr, /*core=*/0);

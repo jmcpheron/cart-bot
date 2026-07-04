@@ -58,6 +58,7 @@ void Motors::begin() {
 }
 
 void Motors::apply(const mecanum::WheelSpeeds& w) {
+    if (suspended_) return;
     drive_one(kChannels[0], w.fl, true);
     drive_one(kChannels[1], w.fr, true);
     drive_one(kChannels[2], w.rl, true);
@@ -65,6 +66,7 @@ void Motors::apply(const mecanum::WheelSpeeds& w) {
 }
 
 void Motors::applyRaw(const mecanum::WheelSpeeds& w) {
+    if (suspended_) return;
     drive_one(kChannels[0], w.fl, false);
     drive_one(kChannels[1], w.fr, false);
     drive_one(kChannels[2], w.rl, false);

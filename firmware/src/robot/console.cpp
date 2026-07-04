@@ -6,12 +6,14 @@
 #include "battery.h"
 #include "comms.h"
 #include "kinematics.h"
+#include "motors.h"
 #include "setpoint.h"
 
 namespace {
 
 SetpointStore* g_store = nullptr;
 Battery* g_battery = nullptr;
+Motors* g_motors = nullptr;
 char g_line[64];
 size_t g_len = 0;
 
@@ -25,6 +27,7 @@ void print_help() {
         "  demo              scripted Test 2 sequence (3s countdown first)\n"
         "  spin [pwm]        wiring check: each wheel in turn, 2s each (default 100)\n"
         "  pindiag           probe RL/RR direction-pin nets (electrical diag)\n"
+        "  rltest [duty] [s] sweep all 6 pin-role configs on RL (default 200, 4s)\n"
         "  batt              pack voltage\n"
         "  stats             ESP-NOW packet stats\n"
         "  mac               this robot's MAC (for the transmitter config)\n"
@@ -142,6 +145,73 @@ void run_pindiag() {
     Serial.println("[pindiag] RL rows should match the RR reference rows.");
 }
 
+// Wait `ms` while keeping the watchdog fed (motors are suspended during
+// rltest, but this keeps the failsafe gate from spamming the log).
+void quiet_wait(uint32_t ms) {
+    const uint32_t end = millis() + ms;
+    while (millis() < end) {
+        g_store->touch();
+        delay(100);
+    }
+}
+
+// Empirical role-finder for RL's three wires: try every assignment of the
+// three GPIOs to (IN1, IN2, EN) and drive both bridge states. The config
+// that moves the wheel in BOTH directions reveals which module pin each
+// wire actually landed on — no multimeter, no wire moves.
+void run_rltest(int duty_arg, int secs_arg) {
+    const int16_t duty = static_cast<int16_t>(constrain(duty_arg, 60, 255));
+    const uint32_t hold_ms = constrain(secs_arg, 1, 15) * 1000UL;
+    static const uint8_t kRlPins[3] = {14, 22, 23};
+    static const uint8_t kPerm[6][3] = {
+        // indices into kRlPins as {in1, in2, en}
+        {0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0},
+    };
+    const uint8_t kLedcCh = 2;  // RL's LEDC channel, already configured
+
+    Serial.printf("[rltest] sweeping 6 pin-role configs, duty=%d, %lus per direction\n",
+                  duty, hold_ms / 1000);
+    g_store->setVelocity(0, 0, 0);
+    g_motors->setSuspended(true);
+    delay(50);
+
+    for (int c = 0; c < 6; c++) {
+        const uint8_t in1 = kRlPins[kPerm[c][0]];
+        const uint8_t in2 = kRlPins[kPerm[c][1]];
+        const uint8_t en  = kRlPins[kPerm[c][2]];
+        Serial.printf("\n===== CONFIG %d:  in1=GPIO%u  in2=GPIO%u  en=GPIO%u =====\n",
+                      c + 1, in1, in2, en);
+        pinMode(in1, OUTPUT); digitalWrite(in1, LOW);
+        pinMode(in2, OUTPUT); digitalWrite(in2, LOW);
+        ledcAttachPin(en, kLedcCh);
+        ledcWrite(kLedcCh, 0);
+
+        Serial.printf("[rltest] config %d FORWARD...\n", c + 1);
+        digitalWrite(in1, HIGH); digitalWrite(in2, LOW);
+        ledcWrite(kLedcCh, duty);
+        quiet_wait(hold_ms);
+        ledcWrite(kLedcCh, 0);
+        digitalWrite(in1, LOW);
+        quiet_wait(1000);
+
+        Serial.printf("[rltest] config %d REVERSE...\n", c + 1);
+        digitalWrite(in1, LOW); digitalWrite(in2, HIGH);
+        ledcWrite(kLedcCh, duty);
+        quiet_wait(hold_ms);
+        ledcWrite(kLedcCh, 0);
+        digitalWrite(in2, LOW);
+        quiet_wait(1000);
+
+        ledcDetachPin(en);
+        pinMode(en, OUTPUT); digitalWrite(en, LOW);
+    }
+
+    g_motors->begin();  // restore the standard pin/LEDC configuration
+    g_motors->setSuspended(false);
+    g_store->setVelocity(0, 0, 0);
+    Serial.println("\n[rltest] done. Report the CONFIG number that spun BOTH directions.");
+}
+
 void cmd_motor(const char* which, int pwm, bool raw) {
     mecanum::WheelSpeeds w{};
     int16_t clamped = static_cast<int16_t>(constrain(pwm, -255, 255));
@@ -185,6 +255,10 @@ void handle_line(char* line) {
         run_demo();
     } else if (strcmp(cmd, "pindiag") == 0) {
         run_pindiag();
+    } else if (strcmp(cmd, "rltest") == 0) {
+        const char* d = strtok(nullptr, " ");
+        const char* t = strtok(nullptr, " ");
+        run_rltest(d ? atoi(d) : 200, t ? atoi(t) : 4);
     } else if (strcmp(cmd, "spin") == 0) {
         const char* val = strtok(nullptr, " ");
         run_spin(val ? atoi(val) : 100);
@@ -206,9 +280,10 @@ void handle_line(char* line) {
 
 }  // namespace
 
-void console_begin(SetpointStore* store, Battery* battery) {
+void console_begin(SetpointStore* store, Battery* battery, Motors* motors) {
     g_store = store;
     g_battery = battery;
+    g_motors = motors;
     print_help();
 }
 

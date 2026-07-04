@@ -38,9 +38,9 @@ power runs are 18–20 AWG silicone wire.
 
 | ✓ | ESP32 GPIO | Board B pin | Function |
 |---|---|---|---|
-| ☐ | 14 | IN1 | RL direction |
+| ☐ | 23 | IN1 | RL direction |
 | ☐ | 22 | IN2 | RL direction |
-| ☐ | 23 | ENA | RL speed (PWM) |
+| ☐ | 14 | ENA | RL speed (PWM) |
 | ☐ | 19 | IN3 | RR direction |
 | ☐ | 18 | IN4 | RR direction |
 | ☐ | 21 | ENB | RR speed (PWM) |
@@ -68,7 +68,7 @@ backwards wheel is fixed in software, not by re-soldering.
 |---|---|---|---|---|
 | FL | A / OUT1-2 | 25 | 26 | 27 |
 | FR | A / OUT3-4 | 16 | 17 | 4  |
-| RL | B / OUT1-2 | 14 | 22 | 23 |
+| RL | B / OUT1-2 | 23 | 22 | 14 |
 | RR | B / OUT3-4 | 19 | 18 | 21 |
 
 Avoids all ESP32 strap pins (0, 2, 5, 12, 15). Free for future use: 13, 32,
@@ -79,24 +79,27 @@ to the original 33/32 assignment.
 
 ## Troubleshooting
 
-- **One direction dead, other fine** → one of that motor's two IN wires never
-  delivers a HIGH (bridge coasts or brakes). Field-validated diagnostic: swap
-  the motor's `in1`/`in2` numbers in `pins.h` and reflash — if the dead
-  direction *moves*, the wire whose GPIO drives the now-dead direction is the
-  broken one. EN is never the culprit for one-direction failures — it gates
-  both directions equally.
-- **A GPIO position that stays dead through wire/board/motor swaps** → either
-  the pin is damaged or the wire is landing one position off on an
-  **input-only pin** (34/35/36/39 — 35 sits right next to 32 on the left
-  edge). Remap to a spare output pin rather than fighting it.
-- **A pin that outputs HIGH fine but "can't" go LOW** (motor drives one
-  direction, brakes in the other; `pindiag` reads normal) → suspect a blown
-  low-side output driver *inside the ESP32*. Input-mode probing can't see
-  this — the broken driver is out of the circuit while sensing. The robot's
-  FIRST dev board had exactly this on GPIO 33 (RL reverse dead through
-  motor, driver-board, wire, and IN2-pin swaps) and was retired 2026-07-04 —
-  it's the one marked "GPIO 33 DEAD". The current board uses the standard
-  map above.
+- **One direction dead, other fine — the full story (July 2026 RL saga).**
+  Two mechanisms produce this symptom:
+  1. A broken IN wire (bridge coasts or brakes in one direction).
+  2. **The roles are shifted**: L298N pin headers read **ENA, IN1, IN2**
+     (enable FIRST) per channel. Wire it positionally as "IN1, IN2, EN" and
+     the EN wire lands on a direction input while a direction wire lands on
+     ENA — then one "direction" simply disables the bridge. Channel B is
+     immune (its order IS IN3, IN4, ENB), which is why only one channel
+     misbehaves.
+  RL's failure survived new motors, a new driver board, new wires, new
+  GPIOs, and a new ESP32 — because the wiring *convention* was the fault
+  and was faithfully reproduced every time. (The first ESP32 was retired
+  on a wrong "GPIO 33 blown driver" theory during this hunt; it is likely
+  fine — retest before discarding.)
+- **Definitive diagnostic, no tools:** the tuning page's **RL pin-role
+  finder** (or console `rltest`) drives all 6 role-assignments of the three
+  wires; the config that moves the wheel in BOTH directions reveals where
+  each wire actually landed. Fix in firmware (`pins.h`) — no rewiring.
+- **A wire that stays dead through swaps** can also be landed one position
+  off on an **input-only pin** (34/35/36/39) — those can never drive a
+  signal.
 
 ## Power-up sequence (assembled robot)
 

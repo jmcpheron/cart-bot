@@ -28,6 +28,16 @@ inline const char kTuneHtml[] PROGMEM = R"HTML(<!DOCTYPE html>
 <div id="note">Step a motor up until the wheel just starts turning — that duty is its
 deadband. Values apply raw (no remap) while non-zero; releasing to 0 stops it.
 Watchdog stops everything if this page closes.</div>
+<div id="bar" style="border-top:2px solid #2a2a2a"><b>RL pin-role finder</b>
+  <span id="rlstat">idle</span><button id="rlstop" style="background:#c33;color:#fff;border:0;border-radius:8px;padding:12px 24px;font-size:16px;font-weight:700">STOP</button></div>
+<div id="rlcfgs" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px"></div>
+<div style="display:flex;gap:12px;padding:0 14px 10px">
+  <button id="rlf" class="st" style="flex:1;background:#274;color:#eee;border:0;border-radius:8px;padding:16px 0;font-size:17px;font-weight:700">FWD ▲</button>
+  <button id="rlr" class="st" style="flex:1;background:#247;color:#eee;border:0;border-radius:8px;padding:16px 0;font-size:17px;font-weight:700">REV ▼</button>
+</div>
+<div id="note">Pick a config, then FWD / REV at your own pace. The config where BOTH
+buttons move the wheel is the true pin-role mapping. Auto-stops 1.5s after
+the page stops talking.</div>
 <script>
 const M=['fl','fr','rl','rr'];
 const duty={fl:0,fr:0,rl:0,rr:0};
@@ -58,6 +68,31 @@ document.getElementById('stopall').addEventListener('click',()=>{
     el.textContent='0';el.classList.remove('on');}
   activeUntil=Date.now()+1500;
 });
+// ---- RL pin-role finder ----
+const CFGS=[[14,22,23],[14,23,22],[22,14,23],[22,23,14],[23,14,22],[23,22,14]];
+let rlCfg=0,rlDir='s';
+const cfgWrap=document.getElementById('rlcfgs');
+CFGS.forEach((c,i)=>{
+  const b=document.createElement('button');b.className='st';
+  b.style.cssText='flex:1 1 30%;padding:10px 4px;font-size:12px';
+  b.innerHTML=`<b>${i+1}</b><br>in1=${c[0]} in2=${c[1]}<br>en=${c[2]}`;
+  b.addEventListener('click',()=>{
+    rlCfg=i+1;rlDir='s';fetch('/rl?dir=s');
+    [...cfgWrap.children].forEach((x,j)=>x.style.background=j===i?'#4a8':'#333');
+  });
+  cfgWrap.appendChild(b);
+});
+document.getElementById('rlf').addEventListener('click',()=>{if(rlCfg)rlDir='f';});
+document.getElementById('rlr').addEventListener('click',()=>{if(rlCfg)rlDir='r';});
+document.getElementById('rlstop').addEventListener('click',()=>{rlDir='s';fetch('/rl?dir=s');});
+setInterval(async()=>{
+  if(rlDir==='s')return;
+  try{
+    const r=await fetch(`/rl?cfg=${rlCfg}&dir=${rlDir}&duty=200`);
+    document.getElementById('rlstat').textContent=await r.text();
+  }catch(e){document.getElementById('rlstat').textContent='link lost';}
+},300);
+
 setInterval(async()=>{
   const any=M.some(m=>duty[m]!==0);
   if(!any&&Date.now()>activeUntil)return;   // go silent so ESP-NOW can drive
