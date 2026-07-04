@@ -11,6 +11,6 @@ struct MotorPins {
 constexpr MotorPins kPinsFL{25, 26, 27};
 constexpr MotorPins kPinsFR{16, 17, 4};
 constexpr MotorPins kPinsRL{33, 32, 23};
-constexpr MotorPins kPinsRR{19, 18, 21};
+constexpr MotorPins kPinsRR{18, 19, 21};  // in1/in2 swapped vs wiring doc: RR ran reversed on first spin test
 
 constexpr uint8_t kPinBatterySense = 34;  // input-only, ADC1_CH6
