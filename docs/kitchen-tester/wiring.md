@@ -1,77 +1,133 @@
 # Kitchen Tester — Wiring
 
-## Power tree
+![Wiring diagram](img/wiring.svg)
 
-```
-7.4V 2S LiPo (+) ──┬──────────────► L298N Board A  12V/VIN terminal
-                   ├──────────────► L298N Board B  12V/VIN terminal
-                   ├──[470–1000µF electrolytic to GND, near the drivers]
-                   └──[100kΩ]──┬──[33kΩ]──► GND        (battery sense divider)
-                               └──────────► ESP32 GPIO 34
+Board **A** drives the front axle (FL + FR), board **B** the rear (RL + RR).
+The pin map's source of truth is `firmware/src/robot/pins.h` — if this doc and
+the code ever disagree, the code wins and this doc has a bug.
 
-L298N Board A 5V out ─────────────► ESP32 VIN (5V pin)
-LiPo (−) / both L298N GND / ESP32 GND ── all common ground (star at Board A)
-```
+## Harness checklist (point-to-point)
 
-- **Keep the 5V-regulator jumper ON** on Board A (it powers the ESP32). Board B's
-  jumper can stay on too; just don't wire Board B's 5V out to anything.
-- **Never power the ESP32 from USB and the L298N 5V at the same time** unless your
-  dev board has a protection diode on VIN (most 38-pin WROOM boards do — verify
-  yours before the first combined USB + battery session, or just unplug the LiPo
-  while flashing).
-- The bulk capacitor matters: four stalled TT motors sag the rail hard enough to
-  brown out the ESP32 mid-drive. Observed symptom is the robot "rebooting" when it
-  hits a wall.
+Work top to bottom; tick each wire as it lands. Signals are Dupont jumpers;
+power runs are 18–20 AWG silicone wire.
 
-## Bench setup (Test 1)
+### Power
 
-For single-motor bench testing, power the ESP32 from USB and the L298N from the
-LiPo, and **leave the L298N 5V out disconnected**:
+| ✓ | From | To | Wire |
+|---|---|---|---|
+| ☐ | LiPo + (JST red) | Board A `12V` terminal | 18–20 AWG red |
+| ☐ | Board A `12V` | Board B `12V` (daisy-chain) | 18–20 AWG red |
+| ☐ | LiPo − (JST black) | Board A `GND` terminal | 18–20 AWG black |
+| ☐ | Board A `GND` | Board B `GND` | 18–20 AWG black |
+| ☐ | Bulk cap 470–1000µF | across Board A `12V` ↔ `GND` — **stripe (−) to GND** | leads |
+| ☐ | Board A `GND` | ESP32 `GND` pin | black Dupont |
+| ☐ | Board A `5V` | ESP32 `VIN` — **untethered driving only, never with USB** | red Dupont |
+
+### Front signals — ESP32 → Board A (remove ENA/ENB plastic jumpers)
+
+| ✓ | ESP32 GPIO | Board A pin | Function |
+|---|---|---|---|
+| ☐ | 25 | IN1 | FL direction |
+| ☐ | 26 | IN2 | FL direction |
+| ☐ | 27 | ENA | FL speed (PWM) |
+| ☐ | 16 | IN3 | FR direction |
+| ☐ | 17 | IN4 | FR direction |
+| ☐ | 4  | ENB | FR speed (PWM) |
+
+### Rear signals — ESP32 → Board B (remove ENA/ENB plastic jumpers)
+
+| ✓ | ESP32 GPIO | Board B pin | Function |
+|---|---|---|---|
+| ☐ | 33 | IN1 | RL direction |
+| ☐ | 32 | IN2 | RL direction |
+| ☐ | 23 | ENA | RL speed (PWM) |
+| ☐ | 19 | IN3 | RR direction |
+| ☐ | 18 | IN4 | RR direction |
+| ☐ | 21 | ENB | RR speed (PWM) |
+
+### Motors
+
+Wire every motor the same way (e.g. red lead to the odd-numbered OUT); a
+backwards wheel is fixed in software, not by re-soldering.
+
+| ✓ | Motor | Terminals |
+|---|---|---|
+| ☐ | FL | Board A OUT1 / OUT2 |
+| ☐ | FR | Board A OUT3 / OUT4 |
+| ☐ | RL | Board B OUT1 / OUT2 |
+| ☐ | RR | Board B OUT3 / OUT4 |
+
+### Board jumper states (both boards)
+
+- ENA / ENB plastic jumpers: **removed** (we PWM those pins)
+- 5V-EN regulator jumper: **installed** (board logic runs from the LiPo)
+
+## Pin map summary
+
+| Motor | Board / channel | IN1 | IN2 | EN (PWM) |
+|---|---|---|---|---|
+| FL | A / OUT1-2 | 25 | 26 | 27 |
+| FR | A / OUT3-4 | 16 | 17 | 4  |
+| RL | B / OUT1-2 | 33 | 32 | 23 |
+| RR | B / OUT3-4 | 19 | 18 | 21 |
+
+Avoids all ESP32 strap pins (0, 2, 5, 12, 15). Free for future use: 13, 14, 22,
+34 (reserved: battery sense), 35/36/39 (input-only).
+
+## Power-up sequence (assembled robot)
+
+1. **USB session (bench / flashing):** Board A `5V` → ESP32 `VIN` wire
+   **disconnected**. Plug USB first, then connect the LiPo. Serial console
+   drives everything.
+2. **Untethered session (floor):** USB unplugged. Connect the `5V` → `VIN`
+   wire, then the LiPo — the ESP32 boots from the L298N regulator, the
+   transmitter/phone takes over.
+3. **Never both.** USB power + the 5V link back-feed each other; most dev
+   boards have a protection diode, but "most" is not a wiring plan.
+4. Power-down is the reverse: LiPo off first, always.
+
+## First spin & reversed wheels
+
+After the harness is done, flash and run `spin` on the serial console — it
+cycles FL → FR → RL → RR for 2s each, announcing each wheel. For any wheel
+spinning backwards, swap that motor's `in1`/`in2` numbers in
+`firmware/src/robot/pins.h` and reflash. Re-run until all four match their
+labels and directions.
+
+## Bench setup (single board, kept for reference)
 
 ```
 Mac USB ─────────────► ESP32                    (power + serial console)
 LiPo (+) ────────────► L298N 12V terminal
-LiPo (−) ────────────► L298N GND ──── jumper ──► ESP32 GND   (REQUIRED)
+LiPo (−) ────────────► L298N GND ── jumper ──► ESP32 GND   (REQUIRED)
 TT motor ────────────► L298N OUT1 / OUT2
 GPIO 25 ► IN1    GPIO 26 ► IN2    GPIO 27 ► ENA (plastic jumper removed)
 ```
 
-The common-ground jumper is not optional: the IN pins are read *relative to the
-L298N's ground*, so without it the motor does nothing or twitches randomly.
-The 5V→VIN link in the power tree above is only for untethered floor driving —
-never have USB and the 5V link connected at the same time unless you've
-verified your dev board has a protection diode on VIN.
+The common-ground jumper is not optional: IN pins are read *relative to the
+L298N's ground* — without it the motor does nothing or twitches randomly.
 
-## Battery sense divider
+## Battery sense divider (future add)
 
-8.4V full pack → 8.4 × 33/133 ≈ 2.08V at GPIO 34 — inside the ADC's usable range
-with 11dB attenuation. Firmware multiplies the millivolt reading by 133/33.
-1% resistors preferred; calibration constant lives in `src/robot/battery.h`.
+Two resistors from pack + to GPIO 34 arm the firmware's low-battery limp/stop:
 
-## Pin map (revised — avoids all strap pins 0, 2, 5, 12, 15)
+```
+LiPo (+) ──[100kΩ]──┬──[33kΩ]── GND
+                    └────────── ESP32 GPIO 34
+```
 
-> The original draft used GPIO 12 (MTDI strap). If it reads high at boot the chip
-> selects 1.8V flash voltage and won't boot. All pins below are safe at boot and
-> LEDC/PWM-capable.
+8.4V full pack → ~2.08V at the pin (safe for ADC, 11dB attenuation). When
+wired: set `kBatterySenseWired = true` in `firmware/src/robot/battery.h`,
+reflash, calibrate `kDividerRatio` against a multimeter using the `batt`
+console command. Until then the firmware reports "sense not wired" and the
+failsafe skips battery checks.
 
-| Motor | L298N board / channel | IN1 | IN2 | EN (PWM) |
-|---|---|---|---|---|
-| FL (front-left)  | A / OUT1-2 | 25 | 26 | 27 |
-| FR (front-right) | A / OUT3-4 | 16 | 17 | 4  |
-| RL (rear-left)   | B / OUT1-2 | 33 | 32 | 23 |
-| RR (rear-right)  | B / OUT3-4 | 19 | 18 | 21 |
+## Power notes
 
-| Other | GPIO |
-|---|---|
-| Battery sense (ADC1_CH6) | 34 (input-only) |
-| Free for future use | 13, 14, 22, 35 (in-only), 36 (in-only), 39 (in-only) |
-
-Remove the plastic jumpers on the L298N ENA/ENB pins — those tie enable high; we
-drive them with PWM instead.
-
-## Motor polarity
-
-Wire every motor the same way (red to OUT-odd, black to OUT-even), then fix any
-backwards wheel in `firmware/src/robot/pins.h` by swapping that motor's IN1/IN2
-numbers — no re-soldering. Test 1 in the test plan verifies each wheel's direction
-individually before assembly.
+- The L298N drops ~1.4–2.5V, so the 3–6V TT motors see ~5–6V from the 7.4V
+  pack — **intentional**, don't add a buck converter.
+- The bulk capacitor is load-bearing: four motors stalling together sag the
+  rail enough to brown-out the ESP32. Symptom: robot "reboots" when it hits
+  a wall.
+- PWM runs at 1kHz (`motors.cpp`) — the L298N's slow BJT bridge loses short
+  pulses at higher frequencies; some whine under partial throttle is normal.

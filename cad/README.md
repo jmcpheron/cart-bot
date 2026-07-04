@@ -7,9 +7,10 @@ parts (Onshape etc.) also land in `stl/` — note their source link here.
 
 | Part | Qty | Material | Settings | Notes |
 |---|---|---|---|---|
-| `tt-motor-bracket` | 4 | PLA | 0.2mm, 3 walls, 25% | **Print ONE first** — verify against a real DORHEA motor, then adjust `params.scad` (`tt_hole_space` especially) |
+| Jason's chassis | 1 | — | — | **The chassis actually in use** (vertical motor mounts, wheels outboard). Own design, not yet committed — drop STL/source in `stl/` to version it |
 | `cable-clip` | 4–6 | PLA | 0.2mm, 100% | Prints on its side, no supports |
-| `chassis-plate` | 0–1 | PETG | 0.28mm, 4 walls, 30% | Optional — plywood offcut works too. Needs ~200mm bed |
+| `tt-motor-bracket` | 0–4 | PLA | 0.2mm, 3 walls, 25% | **Unused** — superseded by Jason's chassis. Kept for the alternative flat-plate build |
+| `chassis-plate` | 0–1 | PETG | 0.28mm, 4 walls, 30% | **Unused** — alternative flat-plate chassis, needs ~200mm bed |
 
 ## Regenerating STLs
 

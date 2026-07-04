@@ -31,6 +31,10 @@ pio device monitor          # serial console (115200) — type `help`
 pio run -e transmitter -t upload   # flash the second ESP32 (Test 3)
 ```
 
+After wiring, `spin` on the serial console cycles each wheel in turn to verify
+the harness. Full wiring diagram + point-to-point checklist:
+[docs/kitchen-tester/wiring.md](docs/kitchen-tester/wiring.md)
+
 ## Status
 
 - [x] Repo scaffold, docs, firmware skeleton, printable part sources

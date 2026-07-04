@@ -22,6 +22,7 @@ void print_help() {
         "  m <fl|fr|rl|rr> <pwm>   single motor, -255..255; holds until Enter\n"
         "  stop              all motors off\n"
         "  demo              scripted Test 2 sequence (3s countdown first)\n"
+        "  spin [pwm]        wiring check: each wheel in turn, 2s each (default 100)\n"
         "  batt              pack voltage\n"
         "  stats             ESP-NOW packet stats\n"
         "  mac               this robot's MAC (for the transmitter config)\n"
@@ -82,6 +83,29 @@ void run_demo() {
     Serial.println("[demo] done");
 }
 
+// Wiring-verification sequence: each wheel in turn, labeled, so a full
+// four-motor harness check is one command. Wrong wheel moving = crossed
+// board/channel; backwards = swap that motor's in1/in2 in pins.h.
+void run_spin(int pwm) {
+    const int16_t p = static_cast<int16_t>(constrain(pwm, -255, 255));
+    static const char* kNames[] = {"FL", "FR", "RL", "RR"};
+    Serial.printf("[spin] cycling FL -> FR -> RL -> RR at %d, 2s each\n", p);
+    for (int i = 0; i < 4; i++) {
+        mecanum::WheelSpeeds w{};
+        if (i == 0) w.fl = p;
+        else if (i == 1) w.fr = p;
+        else if (i == 2) w.rl = p;
+        else w.rr = p;
+        Serial.printf("[spin] %s\n", kNames[i]);
+        g_store->setDirect(w);
+        hold(2000);
+        g_store->setDirect(mecanum::WheelSpeeds{});
+        hold(600);
+    }
+    g_store->setVelocity(0, 0, 0);
+    Serial.println("[spin] done");
+}
+
 void cmd_motor(const char* which, int pwm) {
     mecanum::WheelSpeeds w{};
     int16_t clamped = static_cast<int16_t>(constrain(pwm, -255, 255));
@@ -122,6 +146,9 @@ void handle_line(char* line) {
         Serial.println("[stop]");
     } else if (strcmp(cmd, "demo") == 0) {
         run_demo();
+    } else if (strcmp(cmd, "spin") == 0) {
+        const char* val = strtok(nullptr, " ");
+        run_spin(val ? atoi(val) : 100);
     } else if (strcmp(cmd, "batt") == 0) {
         const float v = g_battery->volts();
         if (v < 0) Serial.println("[batt] sense not wired (kBatterySenseWired=false)");
