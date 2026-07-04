@@ -8,5 +8,8 @@ class Motors {
 public:
     void begin();
     void apply(const mecanum::WheelSpeeds& w);
+    // Same, but WITHOUT the deadband remap — raw duty straight to the bridge.
+    // For characterizing a motor's true stall threshold from the console.
+    void applyRaw(const mecanum::WheelSpeeds& w);
     void stop();
 };

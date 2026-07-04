@@ -14,6 +14,7 @@
 #include "kinematics.h"
 #include "motors.h"
 #include "setpoint.h"
+#include "webtune.h"
 
 namespace {
 
@@ -52,7 +53,11 @@ void motor_task(void*) {
         mecanum::WheelSpeeds w =
             sp.direct ? sp.wheels : mecanum::mix(sp.vx, sp.vy, sp.omega);
         if (gate == DriveGate::kLimp) w = scale_half(w);
-        g_motors.apply(w);
+        if (sp.direct && sp.raw) {
+            g_motors.applyRaw(w);
+        } else {
+            g_motors.apply(w);
+        }
     }
 }
 
@@ -66,6 +71,7 @@ void setup() {
     g_motors.begin();
     g_battery.begin();
     comms_begin(&g_setpoint);
+    webtune_begin(&g_setpoint, &g_battery);
     console_begin(&g_setpoint, &g_battery);
 
     xTaskCreatePinnedToCore(motor_task, "motor", 4096, nullptr,
@@ -74,5 +80,6 @@ void setup() {
 
 void loop() {
     console_poll();
+    webtune_poll();
     delay(5);
 }

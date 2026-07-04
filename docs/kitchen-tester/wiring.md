@@ -71,8 +71,30 @@ backwards wheel is fixed in software, not by re-soldering.
 | RL | B / OUT1-2 | 33 | 32 | 23 |
 | RR | B / OUT3-4 | 19 | 18 | 21 |
 
-Avoids all ESP32 strap pins (0, 2, 5, 12, 15). Free for future use: 13, 14, 22,
-34 (reserved: battery sense), 35/36/39 (input-only).
+Avoids all ESP32 strap pins (0, 2, 5, 12, 15). Free for future use: 13, 14,
+22, 34 (reserved: battery sense). Never use 35/36/39 (input-only — they
+cannot drive a signal).
+
+## Troubleshooting
+
+- **One direction dead, other fine** → one of that motor's two IN wires never
+  delivers a HIGH (bridge coasts or brakes). Field-validated diagnostic: swap
+  the motor's `in1`/`in2` numbers in `pins.h` and reflash — if the dead
+  direction *moves*, the wire whose GPIO drives the now-dead direction is the
+  broken one. EN is never the culprit for one-direction failures — it gates
+  both directions equally.
+- **A GPIO position that stays dead through wire/board/motor swaps** → either
+  the pin is damaged or the wire is landing one position off on an
+  **input-only pin** (34/35/36/39 — 35 sits right next to 32 on the left
+  edge). Remap to a spare output pin rather than fighting it.
+- **A pin that outputs HIGH fine but "can't" go LOW** (motor drives one
+  direction, brakes in the other; `pindiag` reads normal) → suspect a blown
+  low-side output driver *inside the ESP32*. Input-mode probing can't see
+  this — the broken driver is out of the circuit while sensing. The robot's
+  FIRST dev board had exactly this on GPIO 33 (RL reverse dead through
+  motor, driver-board, wire, and IN2-pin swaps) and was retired 2026-07-04 —
+  it's the one marked "GPIO 33 DEAD". The current board uses the standard
+  map above.
 
 ## Power-up sequence (assembled robot)
 

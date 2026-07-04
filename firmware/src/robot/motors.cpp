@@ -32,13 +32,14 @@ const Channel kChannels[] = {
 // production build.
 constexpr uint32_t kMinDuty = 100;
 
-void drive_one(const Channel& ch, int16_t speed) {
+void drive_one(const Channel& ch, int16_t speed, bool remap) {
     const bool forward = speed >= 0;
     digitalWrite(ch.pins.in1, forward ? HIGH : LOW);
     digitalWrite(ch.pins.in2, forward ? LOW : HIGH);
     uint32_t duty = static_cast<uint32_t>(forward ? speed : -speed);
     if (duty > mecanum::kMaxPwm) duty = mecanum::kMaxPwm;
-    if (duty > 0) duty = kMinDuty + duty * (mecanum::kMaxPwm - kMinDuty) / mecanum::kMaxPwm;
+    if (remap && duty > 0)
+        duty = kMinDuty + duty * (mecanum::kMaxPwm - kMinDuty) / mecanum::kMaxPwm;
     ledcWrite(ch.ledc, duty);
 }
 
@@ -57,10 +58,17 @@ void Motors::begin() {
 }
 
 void Motors::apply(const mecanum::WheelSpeeds& w) {
-    drive_one(kChannels[0], w.fl);
-    drive_one(kChannels[1], w.fr);
-    drive_one(kChannels[2], w.rl);
-    drive_one(kChannels[3], w.rr);
+    drive_one(kChannels[0], w.fl, true);
+    drive_one(kChannels[1], w.fr, true);
+    drive_one(kChannels[2], w.rl, true);
+    drive_one(kChannels[3], w.rr, true);
+}
+
+void Motors::applyRaw(const mecanum::WheelSpeeds& w) {
+    drive_one(kChannels[0], w.fl, false);
+    drive_one(kChannels[1], w.fr, false);
+    drive_one(kChannels[2], w.rl, false);
+    drive_one(kChannels[3], w.rr, false);
 }
 
 void Motors::stop() {

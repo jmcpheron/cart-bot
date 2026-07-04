@@ -5,6 +5,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 
+#include "config.h"
 #include "protocol.h"
 #include "setpoint.h"
 
@@ -37,6 +38,7 @@ void on_receive(const uint8_t* /*mac*/, const uint8_t* data, int len) {
     portEXIT_CRITICAL(&g_stats_mux);
 
     if (!g_store) return;
+    if (g_store->rawSessionActive()) return;  // tuning page owns the motors
     switch (cmd.cmd) {
         case proto::kCmdDrive:
             g_store->setVelocity(cmd.vx, cmd.vy, cmd.omega);
@@ -56,9 +58,12 @@ void on_receive(const uint8_t* /*mac*/, const uint8_t* data, int len) {
 
 void comms_begin(SetpointStore* store) {
     g_store = store;
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();  // no AP association — ESP-NOW only
-    esp_wifi_set_channel(proto::kEspNowChannel, WIFI_SECOND_CHAN_NONE);
+    // AP_STA: the STA side carries ESP-NOW from the transmitter; the AP side
+    // hosts the bench-tuning web page. The softAP pins the shared channel.
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP(kTuneApSsid, kTuneApPass, proto::kEspNowChannel);
+    Serial.printf("[comms] tuning AP '%s', page at http://%s\n",
+                  kTuneApSsid, WiFi.softAPIP().toString().c_str());
 
     if (esp_now_init() != ESP_OK) {
         Serial.println("[comms] esp_now_init FAILED");

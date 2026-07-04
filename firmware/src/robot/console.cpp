@@ -20,9 +20,11 @@ void print_help() {
         "commands:\n"
         "  v <vx> <vy> <w>   drive (-100..100); holds until Enter\n"
         "  m <fl|fr|rl|rr> <pwm>   single motor, -255..255; holds until Enter\n"
+        "  raw <fl|fr|rl|rr> <duty>   same but NO deadband remap (tuning)\n"
         "  stop              all motors off\n"
         "  demo              scripted Test 2 sequence (3s countdown first)\n"
         "  spin [pwm]        wiring check: each wheel in turn, 2s each (default 100)\n"
+        "  pindiag           probe RL/RR direction-pin nets (electrical diag)\n"
         "  batt              pack voltage\n"
         "  stats             ESP-NOW packet stats\n"
         "  mac               this robot's MAC (for the transmitter config)\n"
@@ -106,7 +108,41 @@ void run_spin(int pwm) {
     Serial.println("[spin] done");
 }
 
-void cmd_motor(const char* which, int pwm) {
+// Electrical self-probe: read each direction-pin net with internal pulls to
+// see what the OUTSIDE world does to it. RR's pins (working channel, same
+// module) are the reference fingerprint. A net that reads HIGH under
+// pulldown is being driven high externally — e.g. a wire landed on 3V3/EN.
+void run_pindiag() {
+    struct P { uint8_t pin; const char* label; };
+    static const P kPins[] = {
+        {33, "RL_IN1"},
+        {22, "RL_IN2"},
+        {32, "old RL_IN2 (should be unwired)"},
+        {19, "RR_IN1 (reference)"},
+        {18, "RR_IN2 (reference)"},
+    };
+    g_store->setVelocity(0, 0, 0);
+    delay(100);  // let the motor task settle everything to zero
+    Serial.println("[pindiag] sensing each net with internal pulls:");
+    for (const P& p : kPins) {
+        pinMode(p.pin, INPUT_PULLDOWN);
+        delay(20);
+        const int down = digitalRead(p.pin);
+        pinMode(p.pin, INPUT_PULLUP);
+        delay(20);
+        const int up = digitalRead(p.pin);
+        pinMode(p.pin, OUTPUT);
+        digitalWrite(p.pin, LOW);
+        Serial.printf("  GPIO %2u  %-28s pulldown->%d  pullup->%d  %s\n",
+                      p.pin, p.label, down, up,
+                      down == 1 ? "<<< DRIVEN HIGH EXTERNALLY"
+                      : up == 0 ? "<<< driven/pulled low externally"
+                                : "");
+    }
+    Serial.println("[pindiag] RL rows should match the RR reference rows.");
+}
+
+void cmd_motor(const char* which, int pwm, bool raw) {
     mecanum::WheelSpeeds w{};
     int16_t clamped = static_cast<int16_t>(constrain(pwm, -255, 255));
     if      (strcmp(which, "fl") == 0) w.fl = clamped;
@@ -114,8 +150,8 @@ void cmd_motor(const char* which, int pwm) {
     else if (strcmp(which, "rl") == 0) w.rl = clamped;
     else if (strcmp(which, "rr") == 0) w.rr = clamped;
     else { Serial.println("? motor must be fl|fr|rl|rr"); return; }
-    g_store->setDirect(w);
-    Serial.printf("[m] %s = %d\n", which, clamped);
+    g_store->setDirect(w, raw);
+    Serial.printf("[%s] %s = %d\n", raw ? "raw" : "m", which, clamped);
     if (clamped != 0) hold_until_enter();
 }
 
@@ -136,16 +172,19 @@ void handle_line(char* line) {
         g_store->setVelocity(vx, vy, w);
         Serial.printf("[v] vx=%d vy=%d w=%d\n", vx, vy, w);
         if (vx != 0 || vy != 0 || w != 0) hold_until_enter();
-    } else if (strcmp(cmd, "m") == 0) {
+    } else if (strcmp(cmd, "m") == 0 || strcmp(cmd, "raw") == 0) {
+        const bool raw = cmd[0] == 'r';
         const char* which = strtok(nullptr, " ");
         const char* val = strtok(nullptr, " ");
-        if (!which || !val) { Serial.println("? usage: m <fl|fr|rl|rr> <pwm>"); return; }
-        cmd_motor(which, atoi(val));
+        if (!which || !val) { Serial.println("? usage: m|raw <fl|fr|rl|rr> <val>"); return; }
+        cmd_motor(which, atoi(val), raw);
     } else if (strcmp(cmd, "stop") == 0) {
         g_store->setVelocity(0, 0, 0);
         Serial.println("[stop]");
     } else if (strcmp(cmd, "demo") == 0) {
         run_demo();
+    } else if (strcmp(cmd, "pindiag") == 0) {
+        run_pindiag();
     } else if (strcmp(cmd, "spin") == 0) {
         const char* val = strtok(nullptr, " ");
         run_spin(val ? atoi(val) : 100);
