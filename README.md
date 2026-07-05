@@ -47,6 +47,16 @@ Everything is hosted on the robot itself: join Wi-Fi **`cartbot-robot`**
   browser Gamepad API — no firmware Bluetooth.
 - `/tune` — per-motor raw-duty tuning + the RL pin-role finder.
 
+### Dances (turtle programming + record/replay)
+
+The drive page's **dance** panel programs LOGO-style step sequences
+(forward 1s, rotate ⟳ 0.5s, pause, …) or records your live driving and
+compresses it into editable steps. Programs play **on the robot** (they
+survive the phone sleeping; the failsafe watchdog stays armed; any manual
+input or STOP aborts instantly) and can be saved to 4 flash slots that
+survive reboots. Playback is open-loop, so dances drift with wheel slip —
+closed-loop tracking is on the production roadmap.
+
 The second ESP32 (`transmitter` env) is no longer needed for driving; it
 remains in the repo as the ESP-NOW testbed seeding the production two-robot
 coordination. If both are powered, an active drive/tune page takes priority

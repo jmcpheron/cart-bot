@@ -6,6 +6,7 @@
 #include <esp_wifi.h>
 
 #include "config.h"
+#include "dance.h"
 #include "protocol.h"
 #include "setpoint.h"
 
@@ -38,9 +39,10 @@ void on_receive(const uint8_t* /*mac*/, const uint8_t* data, int len) {
     portEXIT_CRITICAL(&g_stats_mux);
 
     if (!g_store) return;
-    // Robot-hosted web sessions (drive page or tuning) own the motors;
-    // ESP-NOW resumes automatically ~1s after the page goes quiet.
-    if (g_store->rawSessionActive() || g_store->webSessionActive()) return;
+    // Robot-hosted web sessions (drive page or tuning) and running dances
+    // own the motors; ESP-NOW resumes ~1s after they go quiet.
+    if (g_store->rawSessionActive() || g_store->webSessionActive() ||
+        dance::playing()) return;
     switch (cmd.cmd) {
         case proto::kCmdDrive:
             g_store->setVelocity(cmd.vx, cmd.vy, cmd.omega);

@@ -5,6 +5,7 @@
 
 #include "battery.h"
 #include "comms.h"
+#include "dance.h"
 #include "kinematics.h"
 #include "motors.h"
 #include "setpoint.h"
@@ -26,6 +27,7 @@ void print_help() {
         "  stop              all motors off\n"
         "  demo              scripted Test 2 sequence (3s countdown first)\n"
         "  spin [pwm]        wiring check: each wheel in turn, 2s each (default 100)\n"
+        "  dance [prog]      play staged/given program (vx,vy,w,ms;...)  dancestop\n"
         "  pindiag           probe RL/RR direction-pin nets (electrical diag)\n"
         "  rltest [duty] [s] sweep all 6 pin-role configs on RL (default 200, 4s)\n"
         "  batt              pack voltage\n"
@@ -170,7 +172,7 @@ void run_rltest(int duty_arg, int secs_arg) {
     const uint8_t kLedcCh = 2;  // RL's LEDC channel, already configured
 
     Serial.printf("[rltest] sweeping 6 pin-role configs, duty=%d, %lus per direction\n",
-                  duty, hold_ms / 1000);
+                  duty, static_cast<unsigned long>(hold_ms / 1000));
     g_store->setVelocity(0, 0, 0);
     g_motors->setSuspended(true);
     delay(50);
@@ -255,6 +257,17 @@ void handle_line(char* line) {
         run_demo();
     } else if (strcmp(cmd, "pindiag") == 0) {
         run_pindiag();
+    } else if (strcmp(cmd, "dance") == 0) {
+        const char* prog = strtok(nullptr, "");  // rest of line
+        if (prog) {
+            const int n = dance::setProgram(prog);
+            if (n < 0) { Serial.println("? bad program (vx,vy,w,ms;...)"); return; }
+            Serial.printf("[dance] staged %d steps\n", n);
+        }
+        if (!dance::play()) Serial.println("? nothing staged or already playing");
+    } else if (strcmp(cmd, "dancestop") == 0) {
+        dance::stop();
+        Serial.println("[dance] stop requested");
     } else if (strcmp(cmd, "rltest") == 0) {
         const char* d = strtok(nullptr, " ");
         const char* t = strtok(nullptr, " ");

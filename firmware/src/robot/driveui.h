@@ -34,6 +34,7 @@ inline const char kDriveHtml[] PROGMEM = R"HTML(<!DOCTYPE html>
   #spd{flex:1}
   #opts{display:flex;gap:16px;padding:0 14px;font-size:12px;color:#999}
   details{padding:6px 14px;font-size:11px;color:#888}
+  button.dt{background:#333;color:#eee;border:0;border-radius:8px;padding:10px 12px;font-size:13px}
   pre{white-space:pre-wrap;color:#7a7;margin:4px 0}
   a{color:#48a}
 </style></head><body>
@@ -59,7 +60,28 @@ inline const char kDriveHtml[] PROGMEM = R"HTML(<!DOCTYPE html>
   <label><input type="checkbox" id="invR"> invert rotate</label>
   <span style="margin-left:auto"><a href="/tune">tuning →</a></span>
 </div>
-<details><summary>gamepad</summary><pre id="gpdbg">none connected — pair a controller with this phone via Bluetooth</pre></details>
+<details><summary>gamepad</summary><pre id="gpdbg"></pre></details>
+<details id="dsec"><summary>dance programming (turtle steps + record)</summary>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 0">
+    <button class="dt" data-s="f">▲ FWD</button><button class="dt" data-s="b">▼ REV</button>
+    <button class="dt" data-s="l">◀ STR</button><button class="dt" data-s="r">STR ▶</button>
+    <button class="dt" data-s="ccw">⟲ ROT</button><button class="dt" data-s="cw">ROT ⟳</button>
+    <button class="dt" data-s="p">⏸ PAUSE</button>
+    <label style="margin-left:auto;font-size:12px">dur <input id="ddur" type="number" value="1.0"
+      step="0.1" min="0.1" max="15" style="width:52px;background:#222;color:#eee;border:1px solid #444"> s</label>
+  </div>
+  <div id="dsteps" style="font-size:13px;line-height:1.9"></div>
+  <div style="padding:6px 0;color:#999;font-size:12px">total <b id="dtot">0.0</b>s · tap a step to delete · steps use the speed slider's value at add time</div>
+  <div style="display:flex;gap:8px;padding:4px 0;flex-wrap:wrap">
+    <button id="dplay" style="background:#274;color:#fff;border:0;border-radius:8px;padding:12px 20px;font-weight:700">▶ PLAY</button>
+    <button id="dstop" style="background:#c33;color:#fff;border:0;border-radius:8px;padding:12px 20px;font-weight:700">⏹ STOP</button>
+    <button id="drec"  style="background:#844;color:#fff;border:0;border-radius:8px;padding:12px 20px;font-weight:700">● REC</button>
+    <button id="dclr"  class="dt">clear</button>
+    <select id="dslot" style="background:#222;color:#eee;border:1px solid #444;border-radius:6px"></select>
+    <button id="dsave" class="dt">save</button><button id="dload" class="dt">load</button>
+  </div>
+  <div id="dmsg" style="font-size:12px;color:#8c8;padding:2px 0"></div>
+</details>
 <script>
 const S={vx:0,vy:0,w:0};
 let activeUntil=0;
@@ -106,10 +128,16 @@ makePad(document.getElementById('rpad'),document.getElementById('rknob'),
   ()=>{S.w=0;},true);
 
 document.getElementById('stop').addEventListener('click',()=>{
-  S.vx=0;S.vy=0;S.w=0;activeUntil=Date.now()+1000;fetch('/cmd?vx=0&vy=0&w=0');});
+  S.vx=0;S.vy=0;S.w=0;activeUntil=Date.now()+1000;
+  danceStop();fetch('/cmd?vx=0&vy=0&w=0');});
 
 // ---- Gamepad (browser-paired controller, e.g. Joy-Con) ----
 let gpIdx=null,gpWas=false;
+const gpdbg=document.getElementById('gpdbg');
+gpdbg.textContent=
+  (navigator.getGamepads?'gamepad API: available':'gamepad API: NOT SUPPORTED by this browser')+
+  (window.isSecureContext?'':'\nnote: page is plain http — some browsers (esp. Chrome) block gamepads here')+
+  '\nnone connected — pair via Bluetooth, then PRESS ANY BUTTON on the controller to wake it up';
 addEventListener('gamepadconnected',e=>{gpIdx=e.gamepad.index;});
 addEventListener('gamepaddisconnected',e=>{if(gpIdx===e.gamepad.index)gpIdx=null;});
 function pollGamepad(){
@@ -135,11 +163,119 @@ function pollGamepad(){
     gp.id+'\naxes: '+gp.axes.map(a=>a.toFixed(2)).join('  ')+'\npressed buttons: '+(pressed||'none');
 }
 
+// ---- Dance: turtle editor + record/replay ----
+const ICONS={f:'▲',b:'▼',l:'◀',r:'▶',ccw:'⟲',cw:'⟳',p:'⏸',rec:'●'};
+let prog=[];try{prog=JSON.parse(localStorage.prog||'[]');}catch(e){}
+let dancing=false,rec=false,recLog=[];
+const dmsg=t=>{document.getElementById('dmsg').textContent=t;};
+function renderProg(){
+  const el=document.getElementById('dsteps');
+  el.innerHTML=prog.length?'':'<i style="color:#666">no steps yet — tap the buttons above, or ● REC and drive</i>';
+  prog.forEach((s,i)=>{
+    const d=document.createElement('span');
+    d.style.cssText='display:inline-block;background:#222;border-radius:6px;padding:3px 8px;margin:2px';
+    d.textContent=`${i+1}.${s.icon} ${(s.ms/1000).toFixed(1)}s`;
+    d.title=`vx${s.vx} vy${s.vy} w${s.w}`;
+    d.addEventListener('click',()=>{prog.splice(i,1);renderProg();});
+    el.appendChild(d);
+  });
+  document.getElementById('dtot').textContent=(prog.reduce((a,s)=>a+s.ms,0)/1000).toFixed(1);
+  localStorage.prog=JSON.stringify(prog);
+}
+function iconFor(vx,vy,w){
+  const ax=Math.abs(vx),ay=Math.abs(vy),aw=Math.abs(w);
+  if(!ax&&!ay&&!aw)return ICONS.p;
+  if(ax>=ay&&ax>=aw)return vx>0?ICONS.f:ICONS.b;
+  if(ay>=aw)return vy>0?ICONS.r:ICONS.l;
+  return w>0?ICONS.cw:ICONS.ccw;
+}
+document.querySelectorAll('.dt[data-s]').forEach(b=>b.addEventListener('click',()=>{
+  const v=+spd.value,ms=Math.round(1000*Math.min(15,Math.max(0.1,parseFloat(document.getElementById('ddur').value)||1)));
+  const map={f:[v,0,0],b:[-v,0,0],l:[0,-v,0],r:[0,v,0],ccw:[0,0,-v],cw:[0,0,v],p:[0,0,0]};
+  const[vx,vy,w]=map[b.dataset.s];
+  prog.push({vx,vy,w,ms,icon:ICONS[b.dataset.s]});renderProg();
+}));
+document.getElementById('dclr').addEventListener('click',()=>{prog=[];renderProg();});
+const ser=()=>prog.map(s=>`${s.vx},${s.vy},${s.w},${s.ms}`).join(';');
+document.getElementById('dplay').addEventListener('click',async()=>{
+  if(!prog.length){dmsg('no steps');return;}
+  try{
+    const up=await fetch('/dance',{method:'POST',body:ser()});
+    if(!up.ok){dmsg(await up.text());return;}
+    const pl=await fetch('/dance/play');
+    dmsg(await pl.text());dancing=pl.ok;
+  }catch(e){dmsg('upload failed');}
+});
+async function danceStop(){dancing=false;try{await fetch('/dance/stop');}catch(e){}}
+document.getElementById('dstop').addEventListener('click',()=>{danceStop();dmsg('stopped');});
+document.getElementById('drec').addEventListener('click',()=>{
+  rec=!rec;
+  document.getElementById('drec').style.background=rec?'#c33':'#844';
+  if(rec){recLog=[];dmsg('recording — drive with the pads, tap ● again to finish');}
+  else{
+    // compress ticks into steps: new step when velocity moves >10 on any axis
+    const steps=[];let cur=null;
+    for(const[vx,vy,w,t]of recLog){
+      if(cur&&Math.abs(vx-cur.vx)<=10&&Math.abs(vy-cur.vy)<=10&&Math.abs(w-cur.w)<=10){cur.end=t;continue;}
+      if(cur)steps.push(cur);
+      cur={vx,vy,w,start:t,end:t};
+    }
+    if(cur)steps.push(cur);
+    prog=steps.map(s=>({vx:s.vx,vy:s.vy,w:s.w,ms:Math.max(200,s.end-s.start),icon:iconFor(s.vx,s.vy,s.w)}))
+              .filter(s=>s.ms>=200).slice(0,64);
+    renderProg();dmsg(`recorded ${prog.length} steps — edit, then PLAY or save`);
+  }
+});
+const slotSel=document.getElementById('dslot');
+async function refreshSlots(){
+  try{
+    const t=await(await fetch('/dance/list')).text();
+    slotSel.innerHTML='';
+    t.split('|').forEach(e=>{
+      const[i,name]=e.split(':');
+      const o=document.createElement('option');o.value=i;
+      o.textContent=`slot ${+i+1}${name?': '+name:' (empty)'}`;
+      slotSel.appendChild(o);
+    });
+  }catch(e){}
+}
+refreshSlots();
+document.getElementById('dsave').addEventListener('click',async()=>{
+  if(!prog.length){dmsg('no steps');return;}
+  const name=prompt('dance name?','dance');if(name===null)return;
+  await fetch('/dance',{method:'POST',body:ser()});
+  const r=await fetch(`/dance/save?slot=${slotSel.value}&name=${encodeURIComponent(name)}`);
+  dmsg(await r.text());refreshSlots();
+});
+document.getElementById('dload').addEventListener('click',async()=>{
+  const r=await fetch(`/dance/load?slot=${slotSel.value}`);
+  if(!r.ok){dmsg(await r.text());return;}
+  const[name,text]=(await r.text()).split('\n');
+  prog=text.split(';').map(t=>{
+    const[vx,vy,w,ms]=t.split(',').map(Number);
+    return{vx,vy,w,ms,icon:iconFor(vx,vy,w)};
+  });
+  renderProg();dmsg(`loaded "${name}"`);
+});
+renderProg();
+
 setInterval(async()=>{
   pollGamepad();
   const k=spd.value/100;
   const vx=Math.round(S.vx*k),vy=Math.round(S.vy*k),w=Math.round(S.w*k);
   const any=vx||vy||w;
+  if(dancing){
+    if(any){await danceStop();}                    // manual input preempts the dance
+    else{
+      try{
+        const st=await(await fetch('/dance/status')).text();
+        document.getElementById('stat').textContent=st;
+        if(st==='idle')dancing=false;
+      }catch(e){}
+      return;                                       // robot feeds its own watchdog
+    }
+  }
+  if(rec&&(any||recLog.length))recLog.push([vx,vy,w,Date.now()]);
   if(!any&&Date.now()>activeUntil){document.getElementById('stat').textContent='idle';return;}
   try{
     const r=await fetch(`/cmd?vx=${vx}&vy=${vy}&w=${w}`);

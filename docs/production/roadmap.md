@@ -1,5 +1,25 @@
 # Production Roadmap — after the kitchen tests pass
 
+## Next milestone: closed-loop tracking (kitchen scale)
+
+Open-loop dances drift because the TT motors are inconsistent and the
+mecanums skid — by design, position feedback is the fix, not better motors.
+Plan, in increasing order of capability:
+
+1. **Gyro heading-hold (cheap interim):** MPU-6050 on I²C (pins free: 13 +
+   one of 32/33). Firmware PI loop trims ω so the robot holds/its heading
+   during dances — kills rotational drift, does nothing for position.
+2. **Overhead camera + ArUco (the real thing):** one downward-looking camera
+   over the test area — an ESP32-CAM streaming MJPEG works, but so does an
+   old phone or webcam. A big printed **ArUco marker** on the robot's roof;
+   an OpenCV script on the Mac (future `tools/tracker/`, uv project like
+   cadlab) computes position + heading ~15-30×/s and sends `/cmd`
+   corrections over the robot's WiFi. Waypoint following ("drive the square
+   FOR REAL") falls out of this. ESP32-CAMs never do vision themselves —
+   they're too weak; they only stream.
+3. **Multi-camera coverage:** only when one camera's view isn't enough
+   (garage scale). Homographies + hand-off; genuinely advanced, defer.
+
 1. **Order drivetrain hardware** — JGB37-520 12V gearmotors with Hall encoders,
    BTS7960 drivers, 4S 18650 pack + BMS.
 2. **Design production chassis** in Onshape — 2020 aluminum extrusion or bent

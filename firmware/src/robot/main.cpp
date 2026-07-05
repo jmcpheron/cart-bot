@@ -10,6 +10,7 @@
 #include "battery.h"
 #include "comms.h"
 #include "console.h"
+#include "dance.h"
 #include "failsafe.h"
 #include "kinematics.h"
 #include "motors.h"
@@ -74,6 +75,7 @@ void setup() {
     g_battery.begin();
     comms_begin(&g_setpoint);
     webtune_begin(&g_setpoint, &g_battery, &g_motors);
+    dance::begin(&g_setpoint);
     console_begin(&g_setpoint, &g_battery, &g_motors);
 
     xTaskCreatePinnedToCore(motor_task, "motor", 4096, nullptr,

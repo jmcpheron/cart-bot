@@ -4,6 +4,7 @@
 #include <WebServer.h>
 
 #include "battery.h"
+#include "dance.h"
 #include "driveui.h"
 #include "kinematics.h"
 #include "motors.h"
@@ -54,6 +55,7 @@ void handle_cmd() {
     const int8_t vx = static_cast<int8_t>(constrain(g_server.arg("vx").toInt(), -100, 100));
     const int8_t vy = static_cast<int8_t>(constrain(g_server.arg("vy").toInt(), -100, 100));
     const int8_t w  = static_cast<int8_t>(constrain(g_server.arg("w").toInt(), -100, 100));
+    if (dance::playing()) dance::stop();  // manual input preempts a dance
     g_store->noteWebDrive();
     g_store->setVelocity(vx, vy, w);
 
@@ -139,6 +141,73 @@ void handle_rl() {
     g_server.send(200, "text/plain", buf);
 }
 
+// ---- dance endpoints ----
+
+void handle_dance_upload() {
+    const int n = dance::setProgram(g_server.arg("plain").c_str());
+    if (n < 0) {
+        g_server.send(400, "text/plain", "bad program");
+        return;
+    }
+    char buf[40];
+    snprintf(buf, sizeof(buf), "staged %d steps", n);
+    g_server.send(200, "text/plain", buf);
+}
+
+void handle_dance_play() {
+    if (g_server.hasArg("slot")) {
+        if (dance::loadSlot(g_server.arg("slot").toInt()).isEmpty()) {
+            g_server.send(404, "text/plain", "slot empty");
+            return;
+        }
+    }
+    g_store->noteWebDrive();  // pause ESP-NOW input while we spin up
+    g_server.send(dance::play() ? 200 : 409, "text/plain",
+                  dance::playing() ? "playing" : "nothing to play");
+}
+
+void handle_dance_stop() {
+    dance::stop();
+    g_store->setVelocity(0, 0, 0);
+    g_server.send(200, "text/plain", "stopped");
+}
+
+void handle_dance_status() {
+    char buf[48];
+    if (dance::playing()) {
+        snprintf(buf, sizeof(buf), "dancing %d/%d",
+                 dance::currentStep() + 1, dance::stepCount());
+    } else {
+        snprintf(buf, sizeof(buf), "idle");
+    }
+    g_server.send(200, "text/plain", buf);
+}
+
+void handle_dance_save() {
+    const bool ok = dance::saveSlot(g_server.arg("slot").toInt(),
+                                    g_server.arg("name"));
+    g_server.send(ok ? 200 : 400, "text/plain", ok ? "saved" : "save failed");
+}
+
+void handle_dance_load() {
+    const int slot = g_server.arg("slot").toInt();
+    const String prog = dance::loadSlot(slot);
+    if (prog.isEmpty()) {
+        g_server.send(404, "text/plain", "slot empty");
+        return;
+    }
+    g_server.send(200, "text/plain", dance::slotName(slot) + "\n" + prog);
+}
+
+void handle_dance_list() {
+    String out;
+    for (int i = 0; i < dance::kSlots; i++) {
+        if (i) out += "|";
+        out += String(i) + ":" + dance::slotName(i);
+    }
+    g_server.send(200, "text/plain", out);
+}
+
 }  // namespace
 
 void webtune_begin(SetpointStore* store, Battery* battery, Motors* motors) {
@@ -150,6 +219,13 @@ void webtune_begin(SetpointStore* store, Battery* battery, Motors* motors) {
     g_server.on("/cmd", handle_cmd);
     g_server.on("/raw", handle_raw);
     g_server.on("/rl", handle_rl);
+    g_server.on("/dance", HTTP_POST, handle_dance_upload);
+    g_server.on("/dance/play", handle_dance_play);
+    g_server.on("/dance/stop", handle_dance_stop);
+    g_server.on("/dance/status", handle_dance_status);
+    g_server.on("/dance/save", handle_dance_save);
+    g_server.on("/dance/load", handle_dance_load);
+    g_server.on("/dance/list", handle_dance_list);
     g_server.begin();
 }
 
