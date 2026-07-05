@@ -18,13 +18,13 @@ inline const char kDriveHtml[] PROGMEM = R"HTML(<!DOCTYPE html>
 <title>cart-bot drive</title>
 <style>
   body{margin:0;font-family:system-ui;background:#111;color:#eee;
-       user-select:none;-webkit-user-select:none;touch-action:none;overflow:hidden}
+       user-select:none;-webkit-user-select:none;overscroll-behavior-y:contain}
   #bar{display:flex;justify-content:space-between;align-items:center;padding:8px 12px}
   #stat{font-size:12px;color:#8c8;max-width:45%;overflow:hidden;white-space:nowrap}
   #stop{background:#c33;color:#fff;border:0;border-radius:8px;padding:12px 26px;
         font-size:17px;font-weight:700}
   #deck{display:flex;gap:12px;padding:0 12px;height:56vh}
-  .pad{flex:1;background:#1c1c1c;border-radius:16px;position:relative;overflow:hidden}
+  .pad{flex:1;background:#1c1c1c;border-radius:16px;position:relative;overflow:hidden;touch-action:none}
   .knob{width:58px;height:58px;border-radius:50%;position:absolute;left:50%;top:50%;
         transform:translate(-50%,-50%);pointer-events:none}
   #dknob{background:#4a8}  #rknob{background:#48a}
