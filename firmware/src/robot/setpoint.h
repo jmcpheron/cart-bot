@@ -31,6 +31,22 @@ public:
         portEXIT_CRITICAL(&mux_);
     }
 
+    // Web drive session: while the robot-hosted drive page is actively
+    // commanding, ESP-NOW input is ignored (same racing-streams problem as
+    // the raw tuning session below).
+    void noteWebDrive() {
+        portENTER_CRITICAL(&mux_);
+        web_stamp_ms_ = millis();
+        portEXIT_CRITICAL(&mux_);
+    }
+
+    bool webSessionActive() {
+        portENTER_CRITICAL(&mux_);
+        const bool active = (millis() - web_stamp_ms_) < 1000;
+        portEXIT_CRITICAL(&mux_);
+        return active;
+    }
+
     // True while a raw tuning command is fresh. Comms uses this to drop
     // ESP-NOW packets during a tuning session — otherwise the transmitter's
     // 10Hz stop keep-alives interleave with the tuning page's 10Hz raw
@@ -77,4 +93,5 @@ private:
     bool direct_ = false;
     bool raw_ = false;
     uint32_t stamp_ms_ = 0;
+    uint32_t web_stamp_ms_ = 0;
 };

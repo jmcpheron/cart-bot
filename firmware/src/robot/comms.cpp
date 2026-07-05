@@ -38,7 +38,9 @@ void on_receive(const uint8_t* /*mac*/, const uint8_t* data, int len) {
     portEXIT_CRITICAL(&g_stats_mux);
 
     if (!g_store) return;
-    if (g_store->rawSessionActive()) return;  // tuning page owns the motors
+    // Robot-hosted web sessions (drive page or tuning) own the motors;
+    // ESP-NOW resumes automatically ~1s after the page goes quiet.
+    if (g_store->rawSessionActive() || g_store->webSessionActive()) return;
     switch (cmd.cmd) {
         case proto::kCmdDrive:
             g_store->setVelocity(cmd.vx, cmd.vy, cmd.omega);
@@ -62,7 +64,7 @@ void comms_begin(SetpointStore* store) {
     // hosts the bench-tuning web page. The softAP pins the shared channel.
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(kTuneApSsid, kTuneApPass, proto::kEspNowChannel);
-    Serial.printf("[comms] tuning AP '%s', page at http://%s\n",
+    Serial.printf("[comms] AP '%s' — drive: http://%s  tuning: /tune\n",
                   kTuneApSsid, WiFi.softAPIP().toString().c_str());
 
     if (esp_now_init() != ESP_OK) {

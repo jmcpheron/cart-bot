@@ -36,6 +36,22 @@ After wiring, `spin` on the serial console cycles each wheel in turn to verify
 the harness. Full wiring diagram + point-to-point checklist:
 [docs/kitchen-tester/wiring.md](docs/kitchen-tester/wiring.md)
 
+## Driving
+
+Everything is hosted on the robot itself: join Wi-Fi **`cartbot-robot`**
+(password in `firmware/src/robot/config.h`) and open **http://192.168.4.1**
+
+- `/` — drive page: dual thumb-pads (left = forward/strafe, right = rotate,
+  true multi-touch), speed scale, invert toggles, STOP. Pair a Bluetooth
+  gamepad (e.g. a Joy-Con) with your **phone** and the page reads it via the
+  browser Gamepad API — no firmware Bluetooth.
+- `/tune` — per-motor raw-duty tuning + the RL pin-role finder.
+
+The second ESP32 (`transmitter` env) is no longer needed for driving; it
+remains in the repo as the ESP-NOW testbed seeding the production two-robot
+coordination. If both are powered, an active drive/tune page takes priority
+and ESP-NOW resumes ~1s after the page goes idle.
+
 ## Status
 
 - [x] Repo scaffold, docs, firmware skeleton, printable part sources

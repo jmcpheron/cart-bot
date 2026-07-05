@@ -13,8 +13,11 @@
 #include "failsafe.h"
 #include "kinematics.h"
 #include "motors.h"
+#include "robot_state.h"
 #include "setpoint.h"
 #include "webtune.h"
+
+volatile DriveGate g_robot_gate = DriveGate::kStop;
 
 namespace {
 
@@ -39,10 +42,9 @@ void motor_task(void*) {
         const SetpointStore::Snapshot sp = g_setpoint.get();
         const DriveGate gate = evaluate_failsafe(
             {sp.age_ms, g_battery.volts()});
+        g_robot_gate = gate;
         if (gate != last_gate) {
-            Serial.printf("[failsafe] gate -> %s\n",
-                          gate == DriveGate::kNormal ? "NORMAL"
-                          : gate == DriveGate::kLimp ? "LIMP" : "STOP");
+            Serial.printf("[failsafe] gate -> %s\n", gate_name(gate));
             last_gate = gate;
         }
 

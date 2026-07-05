@@ -4,8 +4,10 @@
 #include <WebServer.h>
 
 #include "battery.h"
+#include "driveui.h"
 #include "kinematics.h"
 #include "motors.h"
+#include "robot_state.h"
 #include "setpoint.h"
 #include "tuneui.h"
 
@@ -39,7 +41,32 @@ void rl_stop_and_restore() {
 }
 
 void handle_index() {
+    g_server.send_P(200, "text/html", kDriveHtml);
+}
+
+void handle_tune() {
     g_server.send_P(200, "text/html", kTuneHtml);
+}
+
+// /cmd?vx=..&vy=..&w=.. — velocity from the drive page. Marks a web-drive
+// session so ESP-NOW input yields while the page is active.
+void handle_cmd() {
+    const int8_t vx = static_cast<int8_t>(constrain(g_server.arg("vx").toInt(), -100, 100));
+    const int8_t vy = static_cast<int8_t>(constrain(g_server.arg("vy").toInt(), -100, 100));
+    const int8_t w  = static_cast<int8_t>(constrain(g_server.arg("w").toInt(), -100, 100));
+    g_store->noteWebDrive();
+    g_store->setVelocity(vx, vy, w);
+
+    char buf[96];
+    const float v = g_battery ? g_battery->volts() : -1.0f;
+    if (v < 0) {
+        snprintf(buf, sizeof(buf), "gate %s · vx %d vy %d w %d",
+                 gate_name(g_robot_gate), vx, vy, w);
+    } else {
+        snprintf(buf, sizeof(buf), "gate %s · %.2fV · vx %d vy %d w %d",
+                 gate_name(g_robot_gate), v, vx, vy, w);
+    }
+    g_server.send(200, "text/plain", buf);
 }
 
 // /raw?fl=..&fr=..&rl=..&rr=..  — applies raw duties (no deadband remap).
@@ -119,6 +146,8 @@ void webtune_begin(SetpointStore* store, Battery* battery, Motors* motors) {
     g_battery = battery;
     g_motors = motors;
     g_server.on("/", handle_index);
+    g_server.on("/tune", handle_tune);
+    g_server.on("/cmd", handle_cmd);
     g_server.on("/raw", handle_raw);
     g_server.on("/rl", handle_rl);
     g_server.begin();

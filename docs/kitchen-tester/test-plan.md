@@ -59,6 +59,13 @@ build fixes it with encoders. Record which way it pulls for reference.
 
 ## Test 3 — ESP-NOW Control from Second ESP32 (1–2 hrs)
 
+> **Status note (2026-07-04):** the ESP-NOW link itself was validated on the
+> bench — 58 packets / 0 drops / imperceptible latency — which is the result
+> this test exists to prove for the two-robot production plan. Everyday
+> driving has since moved to the robot-hosted page (`cartbot-robot` →
+> 192.168.4.1); the transmitter remains the coordination-protocol testbed.
+> The watchdog kill-test below is still worth running once for the record.
+
 Flash `pio run -e transmitter -t upload` on the second ESP32. Join its Wi-Fi AP
 (`cartbot-tx` / password in `src/transmitter/config.h`) from your phone, open
 `http://192.168.4.1`, drive with the touch joystick.
