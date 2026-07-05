@@ -61,26 +61,37 @@ inline const char kDriveHtml[] PROGMEM = R"HTML(<!DOCTYPE html>
   <span style="margin-left:auto"><a href="/tune">tuning →</a></span>
 </div>
 <details><summary>gamepad</summary><pre id="gpdbg"></pre></details>
-<details id="dsec"><summary>dance programming (turtle steps + record)</summary>
-  <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 0">
+<details id="dsec" open><summary>dances</summary>
+  <div style="display:flex;gap:8px;padding:10px 0 6px;align-items:center">
+    <button id="dplay" style="flex:2;background:#274;color:#fff;border:0;border-radius:10px;padding:16px 0;font-size:17px;font-weight:700">▶ PLAY</button>
+    <button id="dstop" style="flex:1;background:#c33;color:#fff;border:0;border-radius:10px;padding:16px 0;font-size:17px;font-weight:700">⏹</button>
+    <button id="drec"  style="flex:2;background:#844;color:#fff;border:0;border-radius:10px;padding:16px 0;font-size:15px;font-weight:700">● record drive</button>
+  </div>
+  <div id="dmsg" style="font-size:13px;color:#8c8;padding:2px 0 8px">no steps yet — pick a preset, add steps, or record your driving</div>
+
+  <div style="color:#bbb;font-size:12px;font-weight:600;padding:4px 0">PRESETS</div>
+  <div id="dpresets" style="display:flex;flex-wrap:wrap;gap:6px;padding-bottom:8px"></div>
+
+  <div style="color:#bbb;font-size:12px;font-weight:600;padding:4px 0">ADD STEPS
+    <label style="float:right;font-weight:400">each step: <input id="ddur" type="number" value="1.0"
+      step="0.1" min="0.1" max="15" style="width:52px;background:#222;color:#eee;border:1px solid #444"> s
+      at the speed slider's %</label></div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;padding-bottom:8px">
     <button class="dt" data-s="f">▲ FWD</button><button class="dt" data-s="b">▼ REV</button>
-    <button class="dt" data-s="l">◀ STR</button><button class="dt" data-s="r">STR ▶</button>
-    <button class="dt" data-s="ccw">⟲ ROT</button><button class="dt" data-s="cw">ROT ⟳</button>
+    <button class="dt" data-s="l">◀ STRAFE</button><button class="dt" data-s="r">STRAFE ▶</button>
+    <button class="dt" data-s="ccw">⟲ ROTATE</button><button class="dt" data-s="cw">ROTATE ⟳</button>
     <button class="dt" data-s="p">⏸ PAUSE</button>
-    <label style="margin-left:auto;font-size:12px">dur <input id="ddur" type="number" value="1.0"
-      step="0.1" min="0.1" max="15" style="width:52px;background:#222;color:#eee;border:1px solid #444"> s</label>
   </div>
-  <div id="dsteps" style="font-size:13px;line-height:1.9"></div>
-  <div style="padding:6px 0;color:#999;font-size:12px">total <b id="dtot">0.0</b>s · tap a step to delete · steps use the speed slider's value at add time</div>
-  <div style="display:flex;gap:8px;padding:4px 0;flex-wrap:wrap">
-    <button id="dplay" style="background:#274;color:#fff;border:0;border-radius:8px;padding:12px 20px;font-weight:700">▶ PLAY</button>
-    <button id="dstop" style="background:#c33;color:#fff;border:0;border-radius:8px;padding:12px 20px;font-weight:700">⏹ STOP</button>
-    <button id="drec"  style="background:#844;color:#fff;border:0;border-radius:8px;padding:12px 20px;font-weight:700">● REC</button>
-    <button id="dclr"  class="dt">clear</button>
-    <select id="dslot" style="background:#222;color:#eee;border:1px solid #444;border-radius:6px"></select>
-    <button id="dsave" class="dt">save</button><button id="dload" class="dt">load</button>
+
+  <div style="color:#bbb;font-size:12px;font-weight:600;padding:4px 0">PROGRAM
+    <span style="float:right;font-weight:400">total <b id="dtot">0.0</b>s · tap a step to remove it</span></div>
+  <div id="dsteps" style="font-size:14px;line-height:2.1;min-height:34px"></div>
+  <div style="display:flex;gap:8px;padding:8px 0;align-items:center">
+    <button id="dclr" class="dt">clear</button>
+    <span style="margin-left:auto;color:#bbb;font-size:12px;font-weight:600">ROBOT FLASH</span>
+    <select id="dslot" style="background:#222;color:#eee;border:1px solid #444;border-radius:6px;padding:8px"></select>
+    <button id="dsave" class="dt">💾 save</button><button id="dload" class="dt">📂 load</button>
   </div>
-  <div id="dmsg" style="font-size:12px;color:#8c8;padding:2px 0"></div>
 </details>
 <script>
 const S={vx:0,vy:0,w:0};
@@ -168,9 +179,28 @@ const ICONS={f:'▲',b:'▼',l:'◀',r:'▶',ccw:'⟲',cw:'⟳',p:'⏸',rec:'●
 let prog=[];try{prog=JSON.parse(localStorage.prog||'[]');}catch(e){}
 let dancing=false,rec=false,recLog=[];
 const dmsg=t=>{document.getElementById('dmsg').textContent=t;};
+
+// Four built-in dances. "drift square" is the standard repeatability test:
+// run it 3x from the same start mark and measure how far it drifts.
+const PRESETS={
+  'drift square':
+    '50,0,0,1500;0,0,0,400;0,50,0,1500;0,0,0,400;-50,0,0,1500;0,0,0,400;0,-50,0,1500;0,0,0,400',
+  'systems check':
+    '40,0,0,1200;0,0,0,300;-40,0,0,1200;0,0,0,300;0,40,0,1200;0,0,0,300;0,-40,0,1200;0,0,0,300;0,0,40,1200;0,0,0,300;0,0,-40,1200',
+  'diamond':
+    '45,45,0,1200;0,0,0,300;-45,45,0,1200;0,0,0,300;-45,-45,0,1200;0,0,0,300;45,-45,0,1200;0,0,0,300',
+  'shimmy spin':
+    '0,45,0,300;0,-45,0,300;0,45,0,300;0,-45,0,300;0,0,0,300;0,0,60,1400;0,0,-60,1400;30,0,0,400;-30,0,0,400;0,0,70,900',
+};
+function textToProg(text){
+  return text.split(';').map(t=>{
+    const[vx,vy,w,ms]=t.split(',').map(Number);
+    return{vx,vy,w,ms,icon:iconFor(vx,vy,w)};
+  });
+}
 function renderProg(){
   const el=document.getElementById('dsteps');
-  el.innerHTML=prog.length?'':'<i style="color:#666">no steps yet — tap the buttons above, or ● REC and drive</i>';
+  el.innerHTML=prog.length?'':'<i style="color:#666">empty — pick a preset, add steps, or ● record</i>';
   prog.forEach((s,i)=>{
     const d=document.createElement('span');
     d.style.cssText='display:inline-block;background:#222;border-radius:6px;padding:3px 8px;margin:2px';
@@ -185,10 +215,21 @@ function renderProg(){
 function iconFor(vx,vy,w){
   const ax=Math.abs(vx),ay=Math.abs(vy),aw=Math.abs(w);
   if(!ax&&!ay&&!aw)return ICONS.p;
+  if(ax&&ay&&Math.abs(ax-ay)<20)return '◆';   // diagonal (both axes)
   if(ax>=ay&&ax>=aw)return vx>0?ICONS.f:ICONS.b;
   if(ay>=aw)return vy>0?ICONS.r:ICONS.l;
   return w>0?ICONS.cw:ICONS.ccw;
 }
+const presetWrap=document.getElementById('dpresets');
+Object.keys(PRESETS).forEach(name=>{
+  const b=document.createElement('button');
+  b.className='dt';b.textContent=name;
+  b.addEventListener('click',()=>{
+    prog=textToProg(PRESETS[name]);renderProg();
+    dmsg(`loaded preset "${name}" — press ▶ PLAY`);
+  });
+  presetWrap.appendChild(b);
+});
 document.querySelectorAll('.dt[data-s]').forEach(b=>b.addEventListener('click',()=>{
   const v=+spd.value,ms=Math.round(1000*Math.min(15,Math.max(0.1,parseFloat(document.getElementById('ddur').value)||1)));
   const map={f:[v,0,0],b:[-v,0,0],l:[0,-v,0],r:[0,v,0],ccw:[0,0,-v],cw:[0,0,v],p:[0,0,0]};
@@ -251,11 +292,8 @@ document.getElementById('dload').addEventListener('click',async()=>{
   const r=await fetch(`/dance/load?slot=${slotSel.value}`);
   if(!r.ok){dmsg(await r.text());return;}
   const[name,text]=(await r.text()).split('\n');
-  prog=text.split(';').map(t=>{
-    const[vx,vy,w,ms]=t.split(',').map(Number);
-    return{vx,vy,w,ms,icon:iconFor(vx,vy,w)};
-  });
-  renderProg();dmsg(`loaded "${name}"`);
+  prog=textToProg(text);
+  renderProg();dmsg(`loaded "${name}" from robot flash — press ▶ PLAY`);
 });
 renderProg();
 

@@ -42,10 +42,14 @@ void rl_stop_and_restore() {
 }
 
 void handle_index() {
+    // no-store: firmware updates change these pages; a stale cached copy
+    // looks like missing features and burns an afternoon.
+    g_server.sendHeader("Cache-Control", "no-store");
     g_server.send_P(200, "text/html", kDriveHtml);
 }
 
 void handle_tune() {
+    g_server.sendHeader("Cache-Control", "no-store");
     g_server.send_P(200, "text/html", kTuneHtml);
 }
 
