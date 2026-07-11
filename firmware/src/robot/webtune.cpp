@@ -6,6 +6,8 @@
 #include "battery.h"
 #include "dance.h"
 #include "driveui.h"
+#include "heading.h"
+#include "imu.h"
 #include "kinematics.h"
 #include "motors.h"
 #include "robot_state.h"
@@ -18,6 +20,7 @@ WebServer g_server(80);
 SetpointStore* g_store = nullptr;
 Battery* g_battery = nullptr;
 Motors* g_motors = nullptr;
+Imu* g_imu = nullptr;
 
 // ---- RL pin-role finder (matches CFGS table in tuneui.h) ----
 struct RlPerm { uint8_t in1, in2, en; };
@@ -63,15 +66,64 @@ void handle_cmd() {
     g_store->noteWebDrive();
     g_store->setVelocity(vx, vy, w);
 
-    char buf[96];
+    char yaw[32];
+    const Imu::Snapshot im = g_imu->get();
+    if (im.ok) {
+        snprintf(yaw, sizeof(yaw), "yaw %.1f%s", heading::wrap180(im.yaw_deg),
+                 g_yaw_holding ? " hold" : "");
+    } else {
+        snprintf(yaw, sizeof(yaw), "yaw --");
+    }
+
+    char buf[144];
     const float v = g_battery ? g_battery->volts() : -1.0f;
     if (v < 0) {
-        snprintf(buf, sizeof(buf), "gate %s · vx %d vy %d w %d",
-                 gate_name(g_robot_gate), vx, vy, w);
+        snprintf(buf, sizeof(buf), "gate %s · vx %d vy %d w %d · %s",
+                 gate_name(g_robot_gate), vx, vy, w, yaw);
     } else {
-        snprintf(buf, sizeof(buf), "gate %s · %.2fV · vx %d vy %d w %d",
-                 gate_name(g_robot_gate), v, vx, vy, w);
+        snprintf(buf, sizeof(buf), "gate %s · %.2fV · vx %d vy %d w %d · %s",
+                 gate_name(g_robot_gate), v, vx, vy, w, yaw);
     }
+    g_server.send(200, "text/plain", buf);
+}
+
+// /imu — gyro debug line (reads the published snapshot only; never touches
+// the I2C bus, which belongs to the motor task). /imu?zero=1 re-zeroes yaw
+// for bench measurements.
+void handle_imu() {
+    if (g_server.hasArg("zero")) g_imu->zeroYaw();
+    const Imu::Snapshot im = g_imu->get();
+    if (g_server.hasArg("j")) {  // machine-readable for the drive page
+        // Worst case ~201 bytes (10-digit cont, errs=4294967295); the old
+        // 176 would truncate and silently break the page's JSON.parse.
+        char jbuf[256];
+        snprintf(jbuf, sizeof(jbuf),
+                 "{\"ok\":%d,\"yaw\":%.1f,\"cont\":%.1f,\"gz\":%.1f,"
+                 "\"gx\":%.1f,\"gy\":%.1f,\"p\":%.1f,\"r\":%.1f,"
+                 "\"ax\":%.2f,\"ay\":%.2f,\"az\":%.2f,\"t\":%.1f,"
+                 "\"bias\":%.2f,\"errs\":%lu,\"hold\":%d,\"trim\":%d,"
+                 "\"still\":%d}",
+                 im.ok ? 1 : 0, heading::wrap180(im.yaw_deg), im.yaw_deg,
+                 im.gyro_z_dps, im.gyro_x_dps, im.gyro_y_dps, im.pitch_deg,
+                 im.roll_deg, im.accel_x_g, im.accel_y_g, im.accel_z_g,
+                 im.temp_c, g_imu->biasDps(),
+                 static_cast<unsigned long>(im.errors), g_yaw_holding ? 1 : 0,
+                 static_cast<int>(g_yaw_trim), im.still ? 1 : 0);
+        g_server.send(200, "application/json", jbuf);
+        return;
+    }
+    char buf[224];
+    snprintf(buf, sizeof(buf),
+             "%s · yaw %.1f (cont %.1f) · gz %.1f dps · p %.1f r %.1f · "
+             "gx %.1f gy %.1f · a %.2f %.2f %.2f g · %.1fC · bias %.2f dps · "
+             "errs %lu · %s trim %d%s",
+             im.ok ? "ok" : "DEAD", heading::wrap180(im.yaw_deg), im.yaw_deg,
+             im.gyro_z_dps, im.pitch_deg, im.roll_deg, im.gyro_x_dps,
+             im.gyro_y_dps, im.accel_x_g, im.accel_y_g, im.accel_z_g,
+             im.temp_c, g_imu->biasDps(),
+             static_cast<unsigned long>(im.errors),
+             g_yaw_holding ? "hold" : "free", static_cast<int>(g_yaw_trim),
+             im.still ? " · still (re-zeroing)" : "");
     g_server.send(200, "text/plain", buf);
 }
 
@@ -214,14 +266,17 @@ void handle_dance_list() {
 
 }  // namespace
 
-void webtune_begin(SetpointStore* store, Battery* battery, Motors* motors) {
+void webtune_begin(SetpointStore* store, Battery* battery, Motors* motors,
+                   Imu* imu) {
     g_store = store;
     g_battery = battery;
     g_motors = motors;
+    g_imu = imu;
     g_server.on("/", handle_index);
     g_server.on("/tune", handle_tune);
     g_server.on("/cmd", handle_cmd);
     g_server.on("/raw", handle_raw);
+    g_server.on("/imu", handle_imu);
     g_server.on("/rl", handle_rl);
     g_server.on("/dance", HTTP_POST, handle_dance_upload);
     g_server.on("/dance/play", handle_dance_play);

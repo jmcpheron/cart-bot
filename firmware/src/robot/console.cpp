@@ -2,12 +2,17 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Wire.h>
 
 #include "battery.h"
 #include "comms.h"
 #include "dance.h"
+#include "heading.h"
+#include "imu.h"
 #include "kinematics.h"
 #include "motors.h"
+#include "pins.h"
+#include "robot_state.h"
 #include "setpoint.h"
 
 namespace {
@@ -15,6 +20,7 @@ namespace {
 SetpointStore* g_store = nullptr;
 Battery* g_battery = nullptr;
 Motors* g_motors = nullptr;
+Imu* g_imu = nullptr;
 char g_line[64];
 size_t g_len = 0;
 
@@ -31,6 +37,8 @@ void print_help() {
         "  pindiag           probe RL/RR direction-pin nets (electrical diag)\n"
         "  rltest [duty] [s] sweep all 6 pin-role configs on RL (default 200, 4s)\n"
         "  batt              pack voltage\n"
+        "  imu [zero|scan|init]  gyro status; zero=reset yaw, scan=I2C bus probe,\n"
+        "                    init=retry bring-up after a wiring fix (robot at rest)\n"
         "  stats             ESP-NOW packet stats\n"
         "  mac               this robot's MAC (for the transmitter config)\n"
         "  help              this text");
@@ -119,8 +127,10 @@ void run_spin(int pwm) {
 // pulldown is being driven high externally — e.g. a wire landed on 3V3/EN.
 void run_pindiag() {
     struct P { uint8_t pin; const char* label; };
+    // GPIO 33 (the old RL_IN1) is deliberately NOT probed anymore: it is now
+    // the IMU's I2C SCL (pins.h), and this probe would leave it driven LOW,
+    // killing the bus until reboot.
     static const P kPins[] = {
-        {33, "RL_IN1"},
         {22, "RL_IN2"},
         {32, "old RL_IN2 (should be unwired)"},
         {19, "RR_IN1 (reference)"},
@@ -214,6 +224,56 @@ void run_rltest(int duty_arg, int secs_arg) {
     Serial.println("\n[rltest] done. Report the CONFIG number that spun BOTH directions.");
 }
 
+// Wiring diagnostic: probe every I2C address on the IMU pins, in both pin
+// orientations, so a swapped SDA/SCL or an AD0-high address shows up in one
+// command. Only runs while the IMU is down — when it's healthy the motor
+// task owns the bus.
+void run_i2c_scan() {
+    if (g_imu->ok()) {
+        Serial.println("[i2c] imu is healthy — bus busy, scan not needed");
+        return;
+    }
+    g_imu->deferReinit();  // keep the 5s auto-reinit off the bus during scan
+    struct O { uint8_t sda, scl; const char* label; };
+    const O kOrients[] = {
+        {kPinImuSda, kPinImuScl, "as designed: SDA=13 SCL=33"},
+        {kPinImuScl, kPinImuSda, "SWAPPED:     SDA=33 SCL=13"},
+    };
+    int total = 0;
+    for (const O& o : kOrients) {
+        Wire.end();
+        Wire.begin(o.sda, o.scl, 100000);
+        Wire.setTimeOut(10);
+        Serial.printf("[i2c] scanning (%s)\n", o.label);
+        int found = 0;
+        for (uint8_t a = 8; a < 120; a++) {
+            Wire.beginTransmission(a);
+            if (Wire.endTransmission() == 0) {
+                Serial.printf("  found 0x%02X%s\n", a,
+                              a == 0x68 ? "  <-- MPU-6050, AD0 low (expected)"
+                              : a == 0x69 ? "  <-- MPU-6050 but AD0 is HIGH — "
+                                            "leave AD0 floating"
+                                          : "");
+                found++;
+            }
+        }
+        if (!found) Serial.println("  nothing found");
+        total += found;
+    }
+    Wire.end();
+    Wire.begin(kPinImuSda, kPinImuScl, 400000);  // restore designed bus
+    if (total == 0) {
+        Serial.println(
+            "[i2c] no devices in either orientation. Check: SDA->GPIO13,\n"
+            "      SCL->GPIO33 (NOT 21/22 — those are motor pins here),\n"
+            "      VCC->3V3, GND->GND, and the solder joints.");
+    } else {
+        Serial.println(
+            "[i2c] after fixing wiring/AD0: `imu init` (robot at rest) — no "
+            "reboot needed.");
+    }
+}
+
 void cmd_motor(const char* which, int pwm, bool raw) {
     mecanum::WheelSpeeds w{};
     int16_t clamped = static_cast<int16_t>(constrain(pwm, -255, 255));
@@ -275,6 +335,34 @@ void handle_line(char* line) {
     } else if (strcmp(cmd, "spin") == 0) {
         const char* val = strtok(nullptr, " ");
         run_spin(val ? atoi(val) : 100);
+    } else if (strcmp(cmd, "imu") == 0) {
+        const char* arg = strtok(nullptr, " ");
+        if (arg && strcmp(arg, "scan") == 0) {
+            run_i2c_scan();
+            return;
+        }
+        if (arg && strcmp(arg, "init") == 0) {
+            Serial.println("[imu] retrying bring-up (keep the robot still)...");
+            g_imu->begin();
+        }
+        if (arg && strcmp(arg, "zero") == 0) {
+            g_imu->zeroYaw();
+            Serial.println("[imu] yaw zeroed");
+        }
+        const Imu::Snapshot im = g_imu->get();
+        Serial.printf(
+            "[imu] %s · yaw %.1f (cont %.1f) · gz %.1f dps · bias %.2f dps · "
+            "errs %lu · %s trim %d%s\n",
+            im.ok ? "ok" : "DEAD", heading::wrap180(im.yaw_deg), im.yaw_deg,
+            im.gyro_z_dps, g_imu->biasDps(),
+            static_cast<unsigned long>(im.errors),
+            g_yaw_holding ? "hold" : "free", static_cast<int>(g_yaw_trim),
+            im.still ? " · still (re-zeroing)" : "");
+        Serial.printf(
+            "[imu] p %.1f r %.1f · gx %.1f gy %.1f dps · "
+            "a %.2f %.2f %.2f g · %.1fC\n",
+            im.pitch_deg, im.roll_deg, im.gyro_x_dps, im.gyro_y_dps,
+            im.accel_x_g, im.accel_y_g, im.accel_z_g, im.temp_c);
     } else if (strcmp(cmd, "batt") == 0) {
         const float v = g_battery->volts();
         if (v < 0) Serial.println("[batt] sense not wired (kBatterySenseWired=false)");
@@ -293,10 +381,12 @@ void handle_line(char* line) {
 
 }  // namespace
 
-void console_begin(SetpointStore* store, Battery* battery, Motors* motors) {
+void console_begin(SetpointStore* store, Battery* battery, Motors* motors,
+                   Imu* imu) {
     g_store = store;
     g_battery = battery;
     g_motors = motors;
+    g_imu = imu;
     print_help();
 }
 

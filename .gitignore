@@ -8,7 +8,15 @@ firmware/.vscode/
 # OpenSCAD backup files
 cad/**/*.scad.bak
 
-# Python (tools/cadlab)
+# Python (tools/cadlab, tools/tracker)
 tools/cadlab/.venv/
+tools/tracker/.venv/
+tools/tracker/out/
 **/__pycache__/
 .pytest_cache/
+
+# WiFi credentials (see secrets.env.example)
+secrets.env
+
+# Claude Code playwright plugin scratch
+.playwright-mcp/

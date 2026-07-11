@@ -1,0 +1,57 @@
+# Kitchen test-area definition. All distances in cm, measured with a tape
+# measure from the CENTER of floor marker 10 (the room origin).
+#
+# Room frame: origin at marker 10, +x toward marker 11, +y toward marker 13,
+# headings in degrees CCW from +x. Floor markers must be laid AXIS-ALIGNED
+# with their printed "TOP EDGE → +y" arrow pointing along +y.
+
+camera:
+  # A plain integer = local webcam index (run `tracker cams --snap` to find
+  # the right one — indices shuffle when devices are replugged). An
+  # http://…/jpg URL still selects the ESP32-CAM poller if it ever returns.
+  source: 0      # tripod UVC camera in the test room (index 2 = Jason's
+                 # iPhone via Continuity Camera; indices shuffle on replug —
+                 # re-run `tracker cams --snap`)
+  width: 1920    # full 1080p — 1.5x the tag pixels of 720p; the far-tag fix
+  height: 1080
+  flip: false    # feed verified un-mirrored (poster text reads correctly).
+                 # If tags ever only decode via flip, suspect the PRINTS are
+                 # mirrored (Zoom preview / transfer-paper print settings).
+
+# Any small cv2.aruco dictionary. DICT_APRILTAG_16H5 matches the FRC-style
+# AprilTags Jason printed 2026-07-06; DICT_4X4_50 is the ArUco equivalent.
+# Keep printed markers and this setting in sync — `tracker markers` uses it.
+dictionary: DICT_APRILTAG_16H5
+
+robot:
+  cmd_url: http://cartbot.local/cmd
+  marker:
+    id: 0
+    size_cm: 15.0
+    yaw_offset_deg: 0.0   # measured by `tracker jog`; mounting misalignment
+
+floor_markers:
+  size_cm: 15.0
+  # id: [x_cm, y_cm] of the marker center. EDIT after taping them down.
+  positions:
+    10: [0.0, 0.0]
+    11: [200.0, 0.0]
+    12: [200.0, 150.0]
+    13: [0.0, 150.0]
+
+signs:      # +1 or -1, set from `tracker jog` results
+  vy: 1
+  w: 1
+
+control:
+  rate_hz: 10.0
+  kp_lin: 1.2         # vx/vy command units per cm of error
+  kp_ang: 0.8         # w command units per degree of heading error
+  max_lin: 40         # |vx|,|vy| cap (full scale is 100)
+  max_w: 30           # |w| cap
+  deadband_cm: 3.0
+  deadband_deg: 5.0
+  arrive_cm: 5.0      # waypoint arrival tolerance...
+  arrive_deg: 10.0
+  arrive_hold_s: 0.5  # ...sustained this long
+  lost_stop_s: 0.5    # marker unseen this long -> send stop, go silent

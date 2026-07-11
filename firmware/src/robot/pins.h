@@ -24,3 +24,12 @@ constexpr MotorPins kPinsRL{17, 16, 4};   // in1/in2 flipped: floor test showed 
 constexpr MotorPins kPinsRR{25, 26, 27};
 
 constexpr uint8_t kPinBatterySense = 34;  // input-only, ADC1_CH6
+
+// MPU-6050 IMU (GY-521) — the ESP32's default I2C pins 21/22 are taken by
+// motors above; the GPIO matrix lets Wire run on any output-capable pins.
+// GPIO 32 deliberately avoided: it was the old RL_IN2 and may still have a
+// stray wire (see console.cpp pin diagnostic).
+// As-built 2026-07-10: SDA landed on 33 and SCL on 13 (found with `imu
+// scan`); swapping HERE beats resoldering — either pin drives I2C fine.
+constexpr uint8_t kPinImuSda = 33;
+constexpr uint8_t kPinImuScl = 13;

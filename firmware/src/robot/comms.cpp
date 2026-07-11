@@ -1,6 +1,7 @@
 #include "comms.h"
 
 #include <Arduino.h>
+#include <ESPmDNS.h>
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -62,12 +63,45 @@ void on_receive(const uint8_t* /*mac*/, const uint8_t* data, int len) {
 
 void comms_begin(SetpointStore* store) {
     g_store = store;
-    // AP_STA: the STA side carries ESP-NOW from the transmitter; the AP side
-    // hosts the bench-tuning web page. The softAP pins the shared channel.
+    // AP_STA: the STA side joins the home LAN when secrets.env bakes in
+    // credentials (the overhead-camera tracker sends /cmd over it) and also
+    // carries ESP-NOW from the transmitter; the AP side hosts the bench
+    // pages and remains the fallback when there is no LAN.
     WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP(kTuneApSsid, kTuneApPass, proto::kEspNowChannel);
+    // No modem power-save: the tracker's 10 Hz /cmd stream needs low latency,
+    // and ESP-NOW receive windows suffer under sleep too.
+    WiFi.setSleep(false);
+
+    uint8_t channel = proto::kEspNowChannel;
+    if (strlen(HOME_WIFI_SSID) > 0) {
+        Serial.printf("[comms] joining '%s'", HOME_WIFI_SSID);
+        WiFi.begin(HOME_WIFI_SSID, HOME_WIFI_PASS);
+        const uint32_t deadline = millis() + kStaJoinTimeoutMs;
+        while (WiFi.status() != WL_CONNECTED && millis() < deadline) {
+            delay(250);
+            Serial.print('.');
+        }
+        Serial.println();
+        if (WiFi.status() == WL_CONNECTED) {
+            // The STA link fixes the shared radio channel — the softAP must
+            // follow it or the AP silently stops beaconing where clients look.
+            channel = static_cast<uint8_t>(WiFi.channel());
+            Serial.printf("[comms] LAN http://%s  (mDNS http://cartbot.local)\n",
+                          WiFi.localIP().toString().c_str());
+        } else {
+            Serial.println("[comms] home WiFi timed out — AP-only fallback");
+        }
+    }
+
+    WiFi.softAP(kTuneApSsid, kTuneApPass, channel);
     Serial.printf("[comms] AP '%s' — drive: http://%s  tuning: /tune\n",
                   kTuneApSsid, WiFi.softAPIP().toString().c_str());
+
+    if (MDNS.begin("cartbot")) {
+        MDNS.addService("http", "tcp", 80);
+    } else {
+        Serial.println("[comms] mDNS failed — use the printed IP");
+    }
 
     if (esp_now_init() != ESP_OK) {
         Serial.println("[comms] esp_now_init FAILED");
@@ -75,7 +109,13 @@ void comms_begin(SetpointStore* store) {
     }
     esp_now_register_recv_cb(on_receive);
     Serial.printf("[comms] ESP-NOW up on channel %u, MAC %s\n",
-                  proto::kEspNowChannel, WiFi.macAddress().c_str());
+                  channel, WiFi.macAddress().c_str());
+    if (channel != proto::kEspNowChannel) {
+        Serial.printf("[comms] WARNING: radio follows the router on channel "
+                      "%u, not %u — the transmitter link is down until the "
+                      "router (or transmitter) moves to this channel\n",
+                      channel, proto::kEspNowChannel);
+    }
 }
 
 CommsStats comms_stats() {

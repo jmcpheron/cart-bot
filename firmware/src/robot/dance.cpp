@@ -2,24 +2,54 @@
 
 #include <Preferences.h>
 
+#include "config.h"
+#include "heading.h"
+#include "imu.h"
 #include "setpoint.h"
 
 namespace dance {
 namespace {
 
-struct Step {
-    int8_t vx, vy, w;
-    uint32_t ms;
-};
-
-Step g_steps[kMaxSteps];
+dancescript::Step g_steps[kMaxSteps];
 int g_count = 0;
 String g_text;  // staged program text, kept for saveSlot()
 volatile int g_current = -1;
 volatile bool g_abort = false;
 volatile bool g_playRequest = false;
 SetpointStore* g_store = nullptr;
+Imu* g_imu = nullptr;
 Preferences g_prefs;
+
+// Gyro-terminated turn: rotate until the yaw delta is covered. Polls at
+// 10ms (not the 50ms of timed steps) — at ~100°/s a 50ms poll would coast
+// ~5° past the target. s.ms carries the stall timeout.
+void run_turn_step(int i, const dancescript::Step& s) {
+    Imu::Snapshot im = g_imu->get();
+    if (!im.ok) {
+        Serial.printf("[dance] step %d: turn skipped (no gyro)\n", i);
+        return;
+    }
+    const float start = im.yaw_deg;
+    g_store->setVelocity(0, 0, s.w);
+    const uint32_t deadline = millis() + s.ms;
+    bool done = false;
+    while (millis() < deadline && !g_abort) {
+        g_store->touch();  // feed the watchdog; failsafe stays armed
+        im = g_imu->get();
+        if (!im.ok) break;  // gyro died mid-turn: don't spin blind
+        if (heading::turnComplete(start, im.yaw_deg, s.turn_deg,
+                                  kTurnStopEarlyDeg)) {
+            done = true;
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    g_store->setVelocity(0, 0, 0);  // stop rotating before the next step
+    Serial.printf("[dance] step %d: turned %.1f of %.1f deg%s\n", i,
+                  static_cast<double>(g_imu->get().yaw_deg - start),
+                  static_cast<double>(s.turn_deg),
+                  done ? "" : (g_abort ? " (aborted)" : " (timeout/no gyro)"));
+}
 
 void dance_task(void*) {
     for (;;) {
@@ -30,7 +60,11 @@ void dance_task(void*) {
         Serial.printf("[dance] playing %d steps\n", g_count);
         for (int i = 0; i < g_count && !g_abort; i++) {
             g_current = i;
-            const Step& s = g_steps[i];
+            const dancescript::Step& s = g_steps[i];
+            if (s.turn) {
+                run_turn_step(i, s);
+                continue;
+            }
             g_store->setVelocity(s.vx, s.vy, s.w);
             const uint32_t end = millis() + s.ms;
             while (millis() < end && !g_abort) {
@@ -46,8 +80,9 @@ void dance_task(void*) {
 
 }  // namespace
 
-void begin(SetpointStore* store) {
+void begin(SetpointStore* store, Imu* imu) {
     g_store = store;
+    g_imu = imu;
     g_prefs.begin("dances", false);
     xTaskCreatePinnedToCore(dance_task, "dance", 4096, nullptr,
                             /*priority=*/1, nullptr, /*core=*/1);
@@ -55,34 +90,13 @@ void begin(SetpointStore* store) {
 
 int setProgram(const char* text) {
     if (playing()) stop();
-    if (!text || !*text) return -1;
 
-    char buf[1600];
-    strncpy(buf, text, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
+    dancescript::Step parsed[kMaxSteps];
+    const int n =
+        dancescript::parse(text, parsed, kMaxSteps, kDanceTurnTimeoutMs);
+    if (n < 0) return -1;
 
-    Step parsed[kMaxSteps];
-    int n = 0;
-    uint32_t total = 0;
-    char* save = nullptr;
-    for (char* tok = strtok_r(buf, ";", &save); tok;
-         tok = strtok_r(nullptr, ";", &save)) {
-        if (n >= kMaxSteps) return -1;
-        int vx, vy, w;
-        long ms;
-        if (sscanf(tok, "%d,%d,%d,%ld", &vx, &vy, &w, &ms) != 4) return -1;
-        ms = constrain(ms, 50L, 15000L);
-        total += static_cast<uint32_t>(ms);
-        if (total > kMaxTotalMs) return -1;
-        parsed[n].vx = static_cast<int8_t>(constrain(vx, -100, 100));
-        parsed[n].vy = static_cast<int8_t>(constrain(vy, -100, 100));
-        parsed[n].w  = static_cast<int8_t>(constrain(w, -100, 100));
-        parsed[n].ms = static_cast<uint32_t>(ms);
-        n++;
-    }
-    if (n == 0) return -1;
-
-    memcpy(g_steps, parsed, sizeof(Step) * n);
+    memcpy(g_steps, parsed, sizeof(dancescript::Step) * n);
     g_count = n;
     g_text = text;
     return n;

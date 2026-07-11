@@ -1,19 +1,24 @@
 #pragma once
 #include <Arduino.h>
 
-class SetpointStore;
+#include "dancescript.h"
 
-// Dance sequencer: plays a list of timed velocity steps ON the robot, so a
-// program keeps running if the phone sleeps. Program text format (no JSON):
-//   "vx,vy,w,ms;vx,vy,w,ms;..."   velocities -100..100, duration ms.
+class SetpointStore;
+class Imu;
+
+// Dance sequencer: plays a list of steps ON the robot, so a program keeps
+// running if the phone sleeps. Program text format (lib/dancescript):
+//   "vx,vy,w,ms"  timed velocity step, velocities -100..100, duration ms
+//   "t,deg,w"     gyro-terminated turn: deg relative (CW+), speed w —
+//                 skipped with a log when the IMU is absent/unhealthy.
 // The executor feeds the watchdog itself; the failsafe stays fully armed.
 namespace dance {
 
-constexpr int kMaxSteps = 64;
-constexpr uint32_t kMaxTotalMs = 120000;  // hard cap per program
-constexpr int kSlots = 4;                 // NVS-persisted programs
+constexpr int kMaxSteps = dancescript::kMaxSteps;
+constexpr uint32_t kMaxTotalMs = dancescript::kMaxTotalMs;
+constexpr int kSlots = 4;  // NVS-persisted programs
 
-void begin(SetpointStore* store);
+void begin(SetpointStore* store, Imu* imu);
 
 // Parse + stage a program. Returns step count, or -1 on parse/limit error.
 int setProgram(const char* text);

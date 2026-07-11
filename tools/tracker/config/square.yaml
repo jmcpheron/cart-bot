@@ -1,0 +1,7 @@
+# "Drive the square FOR REAL" — a 1 m square inside the default room frame.
+# Run: uv run tracker route config/square.yaml
+- {x: 50, y: 25, heading: 0}
+- {x: 150, y: 25, heading: 90}
+- {x: 150, y: 125, heading: 180}
+- {x: 50, y: 125, heading: -90}
+- {x: 50, y: 25, heading: 0}

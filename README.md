@@ -16,9 +16,12 @@ build. See [docs/project-brief.md](docs/project-brief.md) for the full vision.
 | `docs/project-brief.md` | Full project brief (with hardware corrections applied) |
 | `docs/kitchen-tester/` | Build guide, wiring/pin map, test plan for the tester |
 | `docs/production/roadmap.md` | Next steps after the kitchen tests pass |
-| `firmware/` | PlatformIO project: `robot` + `transmitter` targets, host-run unit tests |
+| `docs/devlog.md` | Development log — the story so far, wrong turns included |
+| `docs/production/tracker-setup.md` | Overhead-camera tracking: mounting, markers, bring-up |
+| `firmware/` | PlatformIO project: `robot` + `transmitter` + `camera` targets, host-run unit tests |
 | `cad/` | STEP design revisions, OpenSCAD sources, generated STL/reports/previews |
 | `tools/cadlab/` | CAD revision tracker (uv/Python): inspect, diff, build, render |
+| `tools/tracker/` | Overhead-camera ArUco tracker + closed-loop waypoint control (uv/Python) |
 | `hardware/bom.md` | Bill of materials — on-hand tester parts and production shopping list |
 
 ## Firmware quickstart
@@ -30,7 +33,12 @@ pio run -e robot            # build robot firmware
 pio run -e robot -t upload  # flash the robot ESP32 over USB
 pio device monitor          # serial console (115200) — type `help`
 pio run -e transmitter -t upload   # flash the second ESP32 (Test 3)
+pio run -e camera -t upload        # flash the overhead ESP32-CAM (GPIO0 jumper first)
 ```
+
+WiFi credentials for the LAN (camera + tracker) come from `secrets.env` at
+the repo root — see `secrets.env.example`. Closed-loop tracking lives in
+`tools/tracker/`; setup guide: [docs/production/tracker-setup.md](docs/production/tracker-setup.md)
 
 After wiring, `spin` on the serial console cycles each wheel in turn to verify
 the harness. Full wiring diagram + point-to-point checklist:
