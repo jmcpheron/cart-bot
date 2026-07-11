@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import math
+import os
 import time
+from collections import deque
 from pathlib import Path
 
 import click
@@ -275,33 +277,66 @@ class Tracker:
         self.src.close()
 
 
+LOCK_PATH = Path("out/controller.lock")
+
+
+def _claim_controller_lock() -> None:
+    """Exactly ONE control loop may command the robot. Two controllers
+    interleaving /cmd streams produced an unexplainable oscillation on
+    2026-07-11 (a zombie route fought a live one); never again."""
+    if LOCK_PATH.exists():
+        try:
+            pid = int(LOCK_PATH.read_text().strip())
+            os.kill(pid, 0)  # raises if that pid is gone
+        except (ValueError, ProcessLookupError, PermissionError):
+            pass  # stale lock — take over
+        else:
+            raise click.ClickException(
+                f"another controller (pid {pid}) is already driving the "
+                "robot — stop it first (or delete out/controller.lock if "
+                "it's a stale file)")
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LOCK_PATH.write_text(str(os.getpid()))
+
+
 def _run_loop(cfg: RoomConfig, H: np.ndarray, targets: list[Target],
               click_to_go: bool, label: str) -> None:
     """The closed-loop driver. Marker lost > lost_stop_s: one explicit stop,
-    then silence — the firmware failsafe backstops a dead process."""
+    then silence — the firmware failsafe backstops a dead process.
+
+    The loop runs as fast as frames arrive so the video stays live; robot
+    commands are rate-limited to ctl.rate_hz inside it. (v1 slept the whole
+    loop to the command rate, so any slow /cmd stalled the video too.)"""
+    _claim_controller_lock()
     tracker = Tracker(cfg, H)
     robot = RobotClient(cfg.robot_cmd_url)
     disp = viz.Display(H)
     ctl = cfg.control
+    plan = list(targets)
     queue = list(targets)
     target: Target | None = queue.pop(0) if queue else None
     stop_sent = False
     arrive_since: float | None = None
     period = 1.0 / ctl.rate_hz
+    last_cmd = 0.0
+    trail: deque[tuple[float, float]] = deque(maxlen=200)
 
     # Ctrl-C raises KeyboardInterrupt; the finally block zeros the robot.
     try:
         while True:
-            t0 = time.monotonic()
             pose = tracker.read()
             cmd: Command | None = None
+            if pose is not None:
+                trail.append((pose.x, pose.y))
+            now = time.monotonic()
 
             if pose is None or tracker.age > ctl.lost_stop_s:
                 if tracker.lost_for() > ctl.lost_stop_s and not stop_sent:
                     robot.stop()
                     stop_sent = True
                     click.echo("robot marker lost — sent stop, holding silent")
-            elif target is not None:
+            elif target is not None and now - last_cmd >= period:
+                last_cmd = now
                 stop_sent = False
                 cmd = step(pose, target, ctl, cfg.signs)
                 robot.drive(cmd.vx, cmd.vy, cmd.w)
@@ -317,12 +352,15 @@ def _run_loop(cfg: RoomConfig, H: np.ndarray, targets: list[Target],
                                 break
                 else:
                     arrive_since = None
-            else:
+            elif target is None:
                 stop_sent = False
 
             if tracker.frame is not None:
                 frame = tracker.frame.copy()
                 disp.draw_grid(frame, cfg.floor_markers)
+                if plan:
+                    disp.draw_route(frame, plan, len(plan) - len(queue) - (1 if target else 0))
+                disp.draw_trail(frame, trail)
                 disp.draw_markers(frame, tracker.detections, cfg.robot_marker_id)
                 if pose:
                     disp.draw_pose(frame, pose)
@@ -341,13 +379,14 @@ def _run_loop(cfg: RoomConfig, H: np.ndarray, targets: list[Target],
                 target = Target(*clicked)
                 click.echo(f"new target ({clicked[0]:.0f}, {clicked[1]:.0f})")
 
-            time.sleep(max(0.0, period - (time.monotonic() - t0)))
+            time.sleep(0.005)  # display runs at frame rate; commands at rate_hz
     except KeyboardInterrupt:
         pass
     finally:
         robot.stop()
         tracker.close()
         cv2.destroyAllWindows()
+        LOCK_PATH.unlink(missing_ok=True)
 
 
 # ------------------------------------------------------------------- pose ---
@@ -496,12 +535,24 @@ def goto(x: float, y: float, heading: float | None, room: str, cal: str) -> None
 @click.argument("waypoints", type=click.Path(exists=True))
 @_room_option
 @click.option("--cal", default=DEFAULT_CAL, show_default=True)
-def route(waypoints: str, room: str, cal: str) -> None:
+@click.option("--face-travel", is_flag=True,
+              help="drive nose-first: each waypoint's heading = the bearing "
+                   "of the leg arriving at it (explicit headings still win)")
+def route(waypoints: str, room: str, cal: str, face_travel: bool) -> None:
     """Follow a YAML waypoint list: [{x: 50, y: 100, heading: 90}, …]."""
     cfg = _load(room)
     raw = yaml.safe_load(Path(waypoints).read_text())
     targets = [Target(float(p["x"]), float(p["y"]),
                       float(p["heading"]) if "heading" in p else None)
                for p in raw]
-    click.echo(f"{len(targets)} waypoints")
+    if face_travel:
+        faced = []
+        for i, t in enumerate(targets):
+            heading = t.heading_deg
+            if heading is None and i > 0:
+                prev = targets[i - 1]
+                heading = math.degrees(math.atan2(t.y - prev.y, t.x - prev.x))
+            faced.append(Target(t.x, t.y, heading))
+        targets = faced
+    click.echo(f"{len(targets)} waypoints" + (" (face-travel)" if face_travel else ""))
     _run_loop(cfg, _load_H(cal), targets, click_to_go=False, label="route")

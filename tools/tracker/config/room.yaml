@@ -28,16 +28,17 @@ robot:
   marker:
     id: 0
     size_cm: 15.0
-    yaw_offset_deg: 0.0   # measured by `tracker jog`; mounting misalignment
+    yaw_offset_deg: 3.3   # measured by `tracker jog` 2026-07-11
 
 floor_markers:
   size_cm: 15.0
-  # id: [x_cm, y_cm] of the marker center. EDIT after taping them down.
+  # id: [x_cm, y_cm] of the marker center. Measured 2026-07-11:
+  # A (10->11) = 95 in = 241.3 cm, B (10->13) = 55 in = 139.7 cm, rectangle.
   positions:
     10: [0.0, 0.0]
-    11: [200.0, 0.0]
-    12: [200.0, 150.0]
-    13: [0.0, 150.0]
+    11: [241.3, 0.0]
+    12: [241.3, 139.7]
+    13: [0.0, 139.7]
 
 signs:      # +1 or -1, set from `tracker jog` results
   vy: 1
@@ -45,13 +46,17 @@ signs:      # +1 or -1, set from `tracker jog` results
 
 control:
   rate_hz: 10.0
-  kp_lin: 1.2         # vx/vy command units per cm of error
+  # Tuned 2026-07-11 after goto orbited its target: the TT motors have a
+  # high duty floor (they can't creep), so small commands overshoot and the
+  # camera latency turns that into a limit cycle. Slower cap + wider
+  # deadband/arrival beats chasing precision the drivetrain can't deliver.
+  kp_lin: 0.8         # vx/vy command units per cm of error
   kp_ang: 0.8         # w command units per degree of heading error
-  max_lin: 40         # |vx|,|vy| cap (full scale is 100)
+  max_lin: 25         # |vx|,|vy| cap (full scale is 100)
   max_w: 30           # |w| cap
-  deadband_cm: 3.0
+  deadband_cm: 5.0
   deadband_deg: 5.0
-  arrive_cm: 5.0      # waypoint arrival tolerance...
+  arrive_cm: 8.0      # waypoint arrival tolerance...
   arrive_deg: 10.0
   arrive_hold_s: 0.5  # ...sustained this long
   lost_stop_s: 0.5    # marker unseen this long -> send stop, go silent

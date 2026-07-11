@@ -17,6 +17,7 @@ build. See [docs/project-brief.md](docs/project-brief.md) for the full vision.
 | `docs/kitchen-tester/` | Build guide, wiring/pin map, test plan for the tester |
 | `docs/production/roadmap.md` | Next steps after the kitchen tests pass |
 | `docs/devlog.md` | Development log — the story so far, wrong turns included |
+| `docs/kitchen-tester/tracker-quickref.md` | Tracker cheat sheet: live view, aiming, command ladder |
 | `docs/production/tracker-setup.md` | Overhead-camera tracking: mounting, markers, bring-up |
 | `firmware/` | PlatformIO project: `robot` + `transmitter` + `camera` targets, host-run unit tests |
 | `cad/` | STEP design revisions, OpenSCAD sources, generated STL/reports/previews |

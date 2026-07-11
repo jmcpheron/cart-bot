@@ -79,6 +79,34 @@ class Display:
         px, py = hg.apply(self.Hinv, np.array([[target.x, target.y]]))[0].astype(int)
         cv2.drawMarker(frame, (px, py), COL_TARGET, cv2.MARKER_CROSS, 24, 3)
 
+    def draw_route(self, frame: np.ndarray, waypoints: list[Target],
+                   next_idx: int) -> None:
+        """The plan: numbered waypoints joined by a polyline. Visited legs
+        dim, the active leg bright."""
+        if not waypoints or self.Hinv is None:
+            return
+        pts = hg.apply(self.Hinv,
+                       np.array([[w.x, w.y] for w in waypoints])).astype(int)
+        for i in range(1, len(pts)):
+            color = COL_TARGET if i == next_idx else COL_GRID
+            cv2.line(frame, tuple(pts[i - 1]), tuple(pts[i]), color, 2,
+                     cv2.LINE_AA)
+        for i, p in enumerate(pts):
+            done = i < next_idx
+            cv2.circle(frame, tuple(p), 12, COL_GRID if done else COL_TARGET, 2)
+            cv2.putText(frame, str(i + 1), (p[0] - 5, p[1] + 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        COL_GRID if done else COL_TARGET, 2)
+
+    def draw_trail(self, frame: np.ndarray, trail) -> None:
+        """Breadcrumbs of where the robot has actually been."""
+        if self.Hinv is None or len(trail) < 2:
+            return
+        pts = hg.apply(self.Hinv, np.array(trail)).astype(int)
+        for i in range(1, len(pts)):
+            cv2.line(frame, tuple(pts[i - 1]), tuple(pts[i]), COL_ROBOT, 1,
+                     cv2.LINE_AA)
+
     def hud(self, frame: np.ndarray, lines: list[str]) -> None:
         for i, text in enumerate(lines):
             y = 28 + 26 * i

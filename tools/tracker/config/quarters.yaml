@@ -1,0 +1,7 @@
+# Bowtie through the four quarters of the 241x140cm arena, finishing center.
+# Run: uv run tracker route config/quarters.yaml
+- {x: 60, y: 35}     # lower-left quarter
+- {x: 181, y: 105}   # upper-right (crosses the middle)
+- {x: 60, y: 105}    # upper-left
+- {x: 181, y: 35}    # lower-right (crosses the middle again)
+- {x: 121, y: 70}    # park in the center
